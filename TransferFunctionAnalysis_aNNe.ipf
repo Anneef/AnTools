@@ -63,49 +63,75 @@
 // 20/09/2019 _ aNNe
 //			Bootstrap Confidence interval correction based on Bradley Efron & Trevor Hastie 2016 "Computer Age statistical inference" pg 192ff
 //			going back to Efron 1982 
+//
+// 30/05/2020 _ aNNe 
+//			Vector Strength confidence intervals fixed. The _complex_ value of the vector strength of the bootstrap 
+//			sample is now taken into account, not only the magnitude. A 95% confidence _region_ in phase / magnitude
+//		 	space is determined and the distance of this region from zero magnitude is taken as lower bound for the 
+//			vector strength magnitude
+
 
 MACRO GainCalculationWrapper()
 // start in the folder above all cell folders
 // goes through and creates the avg gain 
 
-STRING Prefix="A"
-STRING CMDSTR
-STRING PathToFolder=GetDataFolder(1)
-
-CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_V\",\" ReturnSpikeTimes(~,V_Threshold=0, MinISI=0.005) \")",Prefix)
-XeqtInSubs(CMDSTR)
-CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_I\",\"STRING/G W_name= \\\"~\\\"; W_name=W_name[0,strlen(W_name)-2]+\\\"ST\\\"; STAfromAnalogue( ~, $W_Name, 1,0)\")",Prefix)
-XeqtInSubs(CMDSTR)
-
-XeqtInSubs("MakeAC()")
-
-STRING/G FolderACs= ""
-CMDSTR="Xeqt4WList(\"??Pref??*_AC\" ,\"root:FolderACs+= \\\"§SUBFULL§~;\\\"\")"
-CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
-CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
-print CMDSTR
-XeqtInSubs(CMDSTR)
-
-AvgACFromList(FolderACs,"AC_avg_scaled")
-STRING/G FolderSTAs=""
-CMDSTR="Xeqt4WList(\"??Pref??*_STA\",\"root:FolderSTAs+=\\\"§SUBFULL§~;\\\"\")"
-CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
-CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
-XeqtInSubs(CMDSTR)
-AvgSTAFromList(FolderSTAs,"STA_avg_scaled")
-
-SplitBeforeFFT(AC_avg_scaled,0)
-WAVESTATS/Q STA_avg_scaled
-SplitBeforeFFT(STA_avg_scaled,V_maxloc)
-FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt
-FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt
-Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled;
-Gain_avg_scaled/=AC_avg_scaled_splt_FFT
-Gain_avg_scaled*=cmplx(str2num(StringByKey("total#spikes", note(STA_avg_scaled),":" ,"\r"))/str2num(StringByKey("totalduration", note(STA_avg_scaled),":" ,"\r")),0)
-GaussFilter(Gain_avg_scaled)
-note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)
-
-
+	STRING Prefix="OU"
+	STRING CMDSTR
+	STRING PathToFolder=GetDataFolder(1)
+	
+	CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_V\",\" ReturnSpikeTimes(~,V_Threshold=0, MinISI=0.005) \")",Prefix)
+	XeqtInSubs(CMDSTR)
+	CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_I\",\"STRING/G W_name= \\\"~\\\"; W_name=W_name[0,strlen(W_name)-2]+\\\"ST\\\"; STAfromAnalogue( ~, $W_Name, 1,0)\")",Prefix)
+	XeqtInSubs(CMDSTR)
+	
+	// create autocorrelation traces for each trial in each subfolder
+	XeqtInSubs("MakeAC()")
+	
+	// Collect all ACs from all subfolders
+	STRING/G FolderACs= ""
+	CMDSTR="Xeqt4WList(\"??Pref??*_AC\" ,\"root:FolderACs+= \\\"§SUBFULL§~;\\\"\")"
+	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
+	XeqtInSubs(CMDSTR)
+	
+	// create the AVG AC from across all folders. Result is in superordinate folder
+	AvgACFromList(FolderACs,"AC_avg_scaled")
+	
+	// collect all spike triggered averages from all subfolders 
+	STRING/G FolderSTAs=""
+	CMDSTR="Xeqt4WList(\"??Pref??*_STA\",\"root:FolderSTAs+=\\\"§SUBFULL§~;\\\"\")"
+	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
+	XeqtInSubs(CMDSTR)
+	
+	// create the AVG STA from across all folders. Result is in superordinate folder
+	AvgSTAFromList(FolderSTAs,"STA_avg_scaled")
+	
+	// calculate overall gain for data from all subfolders
+	SplitBeforeFFT(AC_avg_scaled,0)
+	WAVESTATS/Q STA_avg_scaled
+	SplitBeforeFFT(STA_avg_scaled,V_maxloc)
+	FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt
+	FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt
+	Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled;
+	Gain_avg_scaled/=AC_avg_scaled_splt_FFT
+	Gain_avg_scaled*=cmplx(str2num(StringByKey("total#spikes", note(STA_avg_scaled),":" ,"\r"))/str2num(StringByKey("totalduration", note(STA_avg_scaled),":" ,"\r")),0)
+	GaussFilter(Gain_avg_scaled)
+	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)
+	
+	// now create avg AC and STA and gain in each subfolder
+	
+	CMDSTR="STRING/G FolderACs=\"\"; Xeqt4WList(\"??Pref??*_AC\",\"FolderACs+=\\\"~;\\\"\") ; AvgACFromList(FolderACs,\"AC_avg_scaled\")"
+	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+	XeqtInSubs(CMDSTR)
+	CMDSTR="STRING/G FolderSTAs=\"\"; Xeqt4WList(\"??Pref??*_STA\",\"FolderSTAs+=\\\"~;\\\"\") ; AvgSTAFromList(FolderSTAs,\"STA_avg_scaled\")"
+	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+	XeqtInSubs(CMDSTR)
+	
+	XeqtInSubs("SplitBeforeFFT(AC_avg_scaled,0);WAVESTATS/Q STA_avg_scaled;SplitBeforeFFT(STA_avg_scaled,V_maxloc);")
+	XeqtInSubs("FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt;FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt;Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled;")
+	XeqtInSubs("Gain_avg_scaled/=AC_avg_scaled_splt_FFT; Gain_avg_scaled*=cmplx(str2num(StringByKey(\"total#spikes\", note(STA_avg_scaled),\":\" ,\"\\r\"))/str2num(StringByKey(\"totalduration\", note(STA_avg_scaled),\":\" ,\"\\r\")),0) ")
+	XeqtInSubs("GaussFilter(Gain_avg_scaled);	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)")
 END 
 	
 
@@ -1175,6 +1201,24 @@ VARIABLE	STA_Dur									// Duration of the STA used for the Gain calculation
 	FFT/COLS /DEST=Dummy_I_FFT Dummy_I
 	
 	KillWaves Dummy_I,Dummy_V
+	// by pure coincidence, the magnitude of the current component in any one of the higher frequencies
+	// could turn out to be very very small. This would then cause a very large gain, purely due the variation in the 
+	// magnitudes due to noise. 
+	// this should be avoided
+	// therefore: check the current FFT for unusually small magnitudes
+	
+	// find out whether there is such a small value
+
+	MAKE/O/N=(round(1000*STA_Dur),DimSize(Dummy_I_FFT,1)) Dummy // only care about frequencies below 1kHz, 
+																				// those are in the first 1000*Sta_dur rows
+		Dummy[][]=cabs(Dummy_I_FFT[p][q])
+	VARIABLE reps=0
+	DO
+		Dummy[][]=cabs(Dummy_I_FFT[p][q])
+		wavestats/Q/M=1 Dummy
+		Dummy_I_FFT[V_minRowLoc][V_minColLoc]+=cmplx(1e-9,1e-9)
+		reps+=1
+	WHILE ( (reps < 1000) && (V_min<1e-9))
 
 	// calculate complex gain
 	Dummy_V_FFT/= Dummy_I_FFT
@@ -1435,7 +1479,10 @@ VARIABLE	RateThresh				// threshold value for dV/dt to define onset
 		// and the idea is to be able to plot all properties against each other and hence the first spike 
 		// also needs an entry here
 		
-		ISI[1,nSpikes-1]-=InWave_ST[p-1]
+		ISI[0]=NaN
+		IF (nSpikes>1)
+			ISI[1,nSpikes-1]-=InWave_ST[p-1]
+		ENDIF
 		VARIABLE 	Reporter
 		
 		IF (mean(thresh)!=mean(thresh) ) // contains NaNs
@@ -1650,7 +1697,9 @@ FUNCTION ReturnCV(InWave)
 // this returns a single number, the coefficient of variation of the inter-spike intervals
 
 WAVE		InWave // contains spike times!
-		
+IF (DimSize(InWave,0) < 2)
+	Return 0
+ENDIF 
 		VARIABLE	nS=DimSize(InWave,0) // number of spikes
 		Duplicate/O InWave aNNe_W_ISI
 		WAVE	ISI=aNNe_W_ISI
@@ -1662,6 +1711,83 @@ WAVE		InWave // contains spike times!
 		Return V_sdev/v_avg
 		
 END		//ReturnCV
+
+FUNCTION AnaIDProtocol()
+// start in folder containing voltage (*_V) and current (_I) traces
+
+	STRING	V_list=WaveList("*_V",";","")
+	STRING	I_list=WaveList("*_I",";","")
+	// healthcheck
+	Variable Num_V=ItemsInList(V_list,";")
+	Variable Num_I=ItemsInList(I_list,";")
+	IF (Num_I != Num_V)
+		DoAlert 0,"Number of voltage and current traces differs ("+num2istr(Num_V)+" vs "+num2istr(Num_I)+"."
+		Num_V=min(num_V,num_I)	// continue with the minimal number
+	ENDIF
+	
+	// attempt to obtain a few key parameters automatically
+	// assume that two large transients in the stimulus wave betray the stimulus onset and offset
+	// 
+	VARIABLE BaselineCurrent
+	MAKE/FREE/N=(num_V) W_OnsetT,W_OffsetT
+	
+	VARIABLE rr, thresh, min_dT
+	FOR (rr=0; rr<num_V; rr++)
+		WAVE stim = $(StringFromList(rr,I_list,";"))
+		Duplicate/O/Free stim curr_I
+		Differentiate curr_I
+		curr_I = abs(curr_I)
+		WAVESTATS/Q/M=1 curr_I
+		thresh = V_max/2
+		min_dt=DimDelta(curr_I,0)*max(5,DimSize(curr_I,0)/100)
+		Findlevels/Q/D=OnOffTimes/M=(min_dT) curr_I, thresh
+		// this uses the assumption that between onset and offset are at least 	5 points 
+		// or even 1 % of the total duration
+		// now the newly created wave OnOffTimes has ideally two entries 
+		// which point to onset and offset time of the stimulus
+		W_OnsetT[rr]=onOffTimes[0]
+		W_OffsetT[rr]=onOffTimes[1]
+	ENDFOR
+	
+	VARIABLE onsetT=median(W_OnsetT)
+	VARIABLE StimDuration=median(W_OffsetT)-median(W_OnsetT)
+	KillWaves W_OnsetT,W_OffsetT
+	
+	printf "estiamted onset %g, duration %g \r",onsetT,StimDuration
+	
+	Make/O/N=(num_V) FirstSpikeLate, InitRate, Rate, StimAmp
+	FirstSpikeLate=NaN
+	InitRate = 0
+	VARIABLE	BaseLineStim	
+	FOR (rr=0; rr<num_V; rr++)
+		WAVE stim = $(StringFromList(rr,I_list,";"))
+		BaseLineStim+= mean(stim,DimOffset(stim,0),OnsetT-DimDelta(stim,0))
+		StimAmp[rr] = mean(stim,OnsetT+DimDelta(stim,0),OnsetT+StimDuration-DimDelta(stim,0))
+	ENDFOR
+	BaseLineStim/=num_V
+	StimAmp-=BaseLineStim
+	STRING W_Name
+	FOR (rr=0; rr<num_V; rr++)
+		W_Name = StringFromList(rr,V_list,";")
+		WAVE resp = $(W_Name)
+		Rate[rr] = ReturnSpikeTimes(resp,V_Threshold=0, MinISI=0.002, Bool_RatePositive=1)
+		IF (Rate[rr] > 0)
+			WAVE ST=$(W_Name[0,strlen(W_Name)-2]+"ST")
+			FirstSpikeLate[rr] = ST[0]-onsetT
+			IF (Rate[rr] > 1)
+				InitRate[rr] = 1/( ST[1]-ST[0])
+			ENDIF
+		ENDIF
+	ENDFOR
+	rate/=StimDuration
+	IF ((stringmatch("s",WaveUnits(stim,0))) || (stringmatch("S",WaveUnits(stim,-1)))|| (stringmatch("SEC",WaveUnits(stim,-1)))|| (stringmatch("sec",WaveUnits(stim,-1))) )
+		SetScale/P d,0,0,"Hz", InitRate, Rate
+		SetScale/P d,0,0,"s",FirstSpikeLate
+	ENDIF
+	SetScale/P d,0,0,WaveUnits(stim,-1), StimAmp
+
+
+END // AnaIDProtocol
 
 
 FUNCTION ReturnSpikeTimes(InWave,[ V_Threshold, MinISI, Bool_RatePositive])
@@ -1693,17 +1819,6 @@ IF (ParamIsDefault(Bool_RatePositive ) )
 	Bool_RatePositive = 0
 ENDIF
 
-// quick health check: dV/dt should not be larger than say 2000 V/s
- Differentiate InWave/D=Dummy;
- IF (wavemax(Dummy)>2000 ||  wavemin(Dummy)<-400 ) 
- 	// there are probably artefacts
- 	KillWaves/Z Dummy
- 	DoAlert 0,"Presumed artefact in "+GetWavesDataFolder(InWave,2)
- 	print  GetWavesDataFolder(InWave,2)
- 	Return 0
- ENDIF
- KillWaves/Z Dummy
-
 // contruct name of spike time wave 
 // if there is any "_" in the inWave's name, replace the ending after the last "_"
 // with "ST":
@@ -1721,26 +1836,43 @@ ENDIF
 														// names is unclear
 		ENDIF
 		OutName=OutName+"ST"
+// quick check: any threshold crossings?
+	Wavestats/Q/M=1 InWave
+	IF (V_max<V_Threshold)
+		MAKE/O/N=(0) $OutName
+		Return 0
+	ENDIF
 
-FindLevels /DEST=$OutName /EDGE=1 /M=(MinISI) /Q  InWave, V_Threshold 
-// use P, so the result comes in index rather than x-scaling
-WAVE		ST=$OutName
-VARIABLE		dt=DimDelta(InWave,0)
-IF (Bool_RatePositive)
-// test whether average trend from 3 pnts before to 3 pnts after spike candidate time 
-// is upward. This is equivalent to just testing whether the point 2 later is above the point 2 earlier
-	ST[]=(InWave[x2pnt(Inwave,ST[p])+4]> InWave[x2pnt(Inwave,ST[p])-4]) ? ST[p] : NaN
-	RemoveNaNs(ST)
-ENDIF
-// now call spikestatistics
-// this is optional, but makes sense to do right now
-// if there are any spikes at all
-IF (DimSize(ST,0)>0)
-	SpikeStats(InWave, ST,RateThresh=30)
-ENDIF
-//make a note about the threshold that was used:
-Note ST,"Threshold:"+num2str(V_Threshold)+" "+Waveunits(InWave,1)
 
+// quick health check: dV/dt should not be larger than say 2000 V/s
+	Differentiate InWave/D=Dummy;
+	IF (wavemax(Dummy)>2000 ||  wavemin(Dummy)<-400 ) 
+// there are probably artefacts
+		KillWaves/Z Dummy
+		DoAlert 0,"Presumed artefact in "+GetWavesDataFolder(InWave,2)
+		print  GetWavesDataFolder(InWave,2)
+		Return 0
+	ENDIF
+	KillWaves/Z Dummy
+	FindLevels /DEST=$OutName /EDGE=1 /M=(MinISI) /Q  InWave, V_Threshold 
+	// use P, so the result comes in index rather than x-scaling
+	WAVE		ST=$OutName
+	VARIABLE		dt=DimDelta(InWave,0)
+	IF (Bool_RatePositive)
+	// test whether average trend from 3 pnts before to 3 pnts after spike candidate time 
+	// is upward. This is equivalent to just testing whether the point 2 later is above the point 2 earlier
+		ST[]=(InWave[x2pnt(Inwave,ST[p])+4]> InWave[x2pnt(Inwave,ST[p])-4]) ? ST[p] : NaN
+		RemoveNaNs(ST)
+	ENDIF
+	// now call spikestatistics
+	// this is optional, but makes sense to do right now
+	// if there are any spikes at all
+	IF (DimSize(ST,0)>0)
+		SpikeStats(InWave, ST,RateThresh=30)
+	ENDIF
+	//make a note about the threshold that was used:
+	Note ST,"Threshold:"+num2str(V_Threshold)+" "+Waveunits(InWave,1)
+	return DimSize(ST,0)
 END
 
 FUNCTION/C ReturnVectorStrengthVector(STWave,Freq)
@@ -1824,8 +1956,16 @@ VARIABLE		FirstPoint, LastPoint	// to deal with the data from Omer, where only s
 		IF (ParamIsDefault(FirstPoint))
 			FirstPoint = 0
 		ENDIF
-
-
+		// check for existance
+		IF (!Waveexists(AnalogueTrace))
+			Print  "Aborting STA from analogue, could not find AnalogueTrace"+ NameOfWave(AnalogueTrace)
+				Return -1
+		ELSEIF (!WaveExists(SpikeTimes))
+			Print "Aborting STA from analogue, couldn't find SpikeTimes"+ NameOfWave(SpikeTimes)
+				Return -1
+		ENDIF
+		
+		
 		VARIABLE	AT_Zero= DimOffset(AnalogueTrace,0)
 		VARIABLE	AT_deltaT=DimDelta(AnalogueTrace,0)
 		VARIABLE	nInAna=DimSize(AnalogueTrace,0)-FirstPoint
@@ -4814,7 +4954,6 @@ VARIABLE	FirstTime=1, totalSTANumber=0, Variance_avg=0
 
 END		// Make and avg AC
 
-
 FUNCTION MakeAC([FirstPoint,LastPoint])
 VARIABLE		FirstPoint,LastPoint
 // for Omers data this needs to be limited to the relevant part of the current
@@ -4900,8 +5039,6 @@ VARIABLE		k, nCurs, SD, duration, totduration=0
 
 END		// Make AC
 
-				
-	
 
 //
 //			SplitBeforeFFT(AC, 0)
@@ -5063,9 +5200,14 @@ FUNCTION CreatePhaseWave(V_Wave[,FirstPoint,LastPoint])
 	// input needs to have a correct x-scaling
 	
 	REDIMENSION/N=(150000) Temp_FFT
-	WAVESTATS/Q/M=1/R=[1,DimSize(Temp_FFT,0)] Temp_FFT
+	WAVESTATS/Q/M=1/R=[1,DimSize(Temp_FFT,0)-1] Temp_FFT
 	VARIABLE	freq=round(V_maxLoc)
 	VARIABLE	p_freq=V_maxRowLoc
+	
+	// estimate sine amplitude from FFT
+	VARIABLE Est_sine_amp = Temp_FFT[p_freq]/(floor(L_Input/2)) // normalize by 
+																					// dividing by number of input points 
+																					// and multiply by 2 (positive/neg freq.
 	
 	IF (freq==0)
 		// if there was no sine signal embedded, the output is f=0, which we should not 
@@ -5113,18 +5255,21 @@ FUNCTION CreatePhaseWave(V_Wave[,FirstPoint,LastPoint])
 	//Delete the note 
 	// write the Frequency of the sinusoidal wave in wave note
 	// write total vector strength in the note 
-	Note /K SPhase,"spikerate:"+num2str(DimSize(ST,0)/nInAna/DimDelta(V_Wave,0))
+	VARIABLE  spikerate=DimSize(ST,0)/nInAna/DimDelta(V_Wave,0)
+	Note /K SPhase,"spikerate:"+num2str(spikerate)
 	Note SPhase, "Sine frequency (Hz): " +num2str(Freq)
+	Note SPhase, "Sine Amp ("+WaveUnits(I_Wave,-1)+"): " +num2str(Est_sine_amp)
 	Note SPhase, "Vector Strength: " +num2str(real(VSandPhase))
 	Note SPhase, "Avg Phase: " +num2str(imag(VSandPhase))
-		
+	Note SPhase, "Gain (Hz/"+WaveUnits(I_Wave,-1)+"): " +num2str(2*real(VSandPhase)/Est_sine_amp*spikerate)
+
 END  // CreatePhaseWave
 
 
-Function BootstrapVS(PhaseWave[,QuantileWave, quiet])
+Function BootstrapVS(PhaseWave[,QuantileWave, quiet, doComplex])
 WAVE		PhaseWave
 WAVE		QuantileWave
-VARIABLE	quiet
+VARIABLE	quiet, doComplex
 	IF (WaveDims(PhaseWave)>1)
 		Abort "Bootstrap vector strength is not multi-dimensionality aware"
 	ENDIF
@@ -5140,11 +5285,17 @@ VARIABLE	quiet
 		WAVE QuantileWave=TargetQuantiles
 	ENDIF
 
+	IF (paramisDefault(doComplex))
+		doComplex = 0	
+	ENDIF
 
 	VARIABLE	nEntries=DimSize(PhaseWave,0)
 	VARIABLE	nboots=100000
-	MAKE/O/N=(nBoots)	BootStats
-	
+	IF (!doComplex)
+		MAKE/O/N=(nBoots)	BootStats
+	ELSE
+		MAKE/C/O/N=(nBoots)	BootStatsC
+	ENDIF
 					
 		IF (nEntries < 2)
 			QuantileWave=NaN
@@ -5165,33 +5316,41 @@ VARIABLE	quiet
 			KillWaves/Z rnd
 			
 	
-
-			MultiThread  	BootStats[]=ResampleAndGetVS(PhaseWave, indexWave=Indicies, clmn=p)
-			
+			IF (!doComplex)
+				MultiThread  	BootStats[]=ResampleAndGetVS(PhaseWave, indexWave=Indicies, clmn=p)
+			ELSE
+				MultiThread  	BootStatsC[]=ResampleAndGetVSandPhase(PhaseWave, indexWave=Indicies, clmn=p)
+			ENDIF
 			KillWaves/Z Indicies
 		ELSE		// not balanced
-	
-			MultiThread  	BootStats[]=ResampleAndGetVS(PhaseWave)
+			IF (!doComplex)
+				MultiThread  	BootStats[]=ResampleAndGetVS(PhaseWave)
+			ELSE
+				MultiThread  	BootStatsC[]=ResampleAndGetVSandPhase(PhaseWave)
+			ENDIF
+		ENDIF
+		
+		IF (!doComplex)
 
+			IF ((isBalanced) && !quiet)
+				printf "Balanced bootstrap of %g data points with %g re-samples was done.\r",nEntries, nBoots
+			ELSEIF (!quiet)
+				printf "Non-balanced bootstrap of %g data points with %g re-samples was done.\r",nEntries, nBoots
+			ENDIF
+			
+			IF (!quiet)
+				Printf "Bootstrap distribution has the quantiles\r\t%1.3f\t%1.3f\t%1.3f\r",QuantileWave[0],QuantileWave[1],QuantileWave[2]
+			ENDIF
+					
+			QuantilesFromSample(Bootstats,QuantileWave,1)
+			
+			IF (!quiet)
+				Printf "\r%f\r%f\r%f\r",QuantileWave[0],QuantileWave[1],QuantileWave[2]
+			ENDIF
+			KillWaves/Z BootStats
+		ELSE		// doComplex
+			// KillNothing, keep BootStatsC
 		ENDIF
-		
-		IF ((isBalanced) && !quiet)
-			printf "Balanced bootstrap of %g data points with %g re-samples was done.\r",nEntries, nBoots
-		ELSEIF (!quiet)
-			printf "Non-balanced bootstrap of %g data points with %g re-samples was done.\r",nEntries, nBoots
-		ENDIF
-		
-		IF (!quiet)
-			Printf "Bootstrap distribution has the quantiles\r\t%1.3f\t%1.3f\t%1.3f\r",QuantileWave[0],QuantileWave[1],QuantileWave[2]
-		ENDIF
-		
-		QuantilesFromSample(Bootstats,QuantileWave,1)
-		
-		IF (!quiet)
-			Printf "\r%f\r%f\r%f\r",QuantileWave[0],QuantileWave[1],QuantileWave[2]
-		ENDIF
-		KillWaves/Z BootStats
-	
 END
 
 ThreadSafe FUNCTION	ResampleAndGetVS(PhaseWave[, indexWave, clmn])
@@ -5227,6 +5386,40 @@ VARIABLE	clmn			// from the  original wave (PhaseWave) a set of samples is drawn
 
 	
 END //ResampleAndGetVS
+
+ThreadSafe FUNCTION/C	ResampleAndGetVSAndPhase(PhaseWave[, indexWave, clmn])
+WAVE		PhaseWave
+WAVE		IndexWave
+VARIABLE	clmn			// from the  original wave (PhaseWave) a set of samples is drawn 
+							// according to the indicies in the clmn-th column of indexwave 
+							// this boostrap sample is then used to compute a vector strength
+							// this scalar value is then returned
+
+	Variable nEntries=DimSize(PhaseWave,0)
+	IF (ParamIsDefault(clmn))
+		Statsresample/N=(nEntries) PhaseWave
+		WAVE	W_Resampled
+	ELSE
+		Duplicate/FREE PhaseWave, W_Resampled
+		W_Resampled[]=PhaseWave[indexWave[p][clmn]]
+		
+	ENDIF
+	
+		Duplicate/FREE W_Resampled, realPart, cmplxPart
+		Redimension/D realPart, cmplxPart
+		
+		realPart		=	cos(W_Resampled)
+		cmplxPart	= 	sin(W_Resampled)
+		
+		VARIABLE	rAVG=mean(realPart), cAVG=mean(cmplxPart)
+		VARIABLE/C	VSandPhase	= cmplx(rAVG,cAVG)
+		
+		KillWaves/Z realPart, cmplxPart, W_Resampled
+	
+		Return VSandPhase
+
+	
+END //ResampleAndGetVSAndPhase
 
 
 Threadsafe FUNCTION/C VSandPhasefromPhases(PhaseWave)
@@ -5266,8 +5459,6 @@ WAVE	PhaseWave
 
 	Return VS
 END // VSfromPhases
-
-
 
 FUNCTION/WAVE CollectDataByNoteAndCriterium(Suffix[, NoteKey,low4NoteVal, up4NoteVal, CriteriumSuffix, lowCrit, upCrit, CriteriumSuffix1, lowCrit1, upCrit1	] )
 STRING		Suffix
