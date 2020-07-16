@@ -5,8 +5,9 @@
 //							ExecuteForAllInList         --> Xeqt4List
 //							ExecuteForSeries				 --> Xeqt4Series
 //
-//03/07/18 aNNe  -  In function Xeqt4List: added Line 57: Sort the list : Case-insensitive alphanumeric sort that sorts wave0 and wave9 before wave10.
+// 03/07/18 aNNe  -  In function Xeqt4List: added Line 57: Sort the list : Case-insensitive alphanumeric sort that sorts wave0 and wave9 before wave10.
 //
+// 16/07/20 aNNe  -  NormTraces is now aware of the point range plotted
 
 Menu "Macros"
 		Submenu "Repetitive Tasks"
@@ -48,6 +49,11 @@ FUNCTION	Xeqt4List(Liste,SkipList, FullPath, Cmd)
 STRING		Liste, SkipList
 STRING		Cmd
 VARIABLE	fullPath
+	
+	// generates a string to be executed, where the following replacements are made
+	//	\~ 	--> ~
+	// ~  	--> wavename from the list
+	// §	--> index of the wave in the list 
 	
 	// option: add full path name before wave name
 	STRING	FP=GetDataFolder(1)
@@ -246,6 +252,93 @@ STRING		FindString,ReplacementStr,Prefix,Suffix
 		currdirStr=StringFromList(currDir,dirList,",")
 		RenameDataFolder $currDirStr, $(Prefix+ ReplaceString(FindString, currdirStr, ReplacementStr)+ Suffix)
 	ENDFOR
+END
+
+FUNCTION/WAVE CrawlTree()
+// returns a wave containing refrences to all the waves in all folders under currently active folder
+
+	DfREF StartDF=getDataFolderDFR()
+	
+	
+	// a wave to hold references to all folders
+	MAKE/O/N=0/DF AllRefs
+	AddFolders(AllRefs, GetDataFolderDFR())
+	// now this contains references to all folders
+	
+	SetDataFolder StartDF
+	
+	VARIABLE	ww,nw,ff, nf=DimSize(AllRefs,0)
+	// now visit all the folders and get the waves
+	// and print results
+	MAKE/O/WAVE/N=0 AllWaves
+	
+	
+	FOR (ff=0; ff< nf; ff++)
+		DFREF cf=AllRefs[ff]
+		DFREF returnTo=GetDataFolderDFR()
+		SetDataFolder cf
+		//print GetDataFolder(1)
+		SetDataFolder returnTo
+		 
+		nw=CountObjectsDFR(cf, 1)
+		FOR (ww=0; ww < nw; ww++)
+			WAVE cw=cf:$(GetIndexedObjNameDFR(cf,1,ww))
+			AllWaves[DimSize(AllWaves,0)]={cw}
+			//print NameOfWave(cw), StringByKey("SIZEINBYTES",WaveInfo(cw,0),":",";")
+		ENDFOR
+	ENDFOR	
+	
+	nw=DimSize(AllWaves, 0)
+	MAKE/O/N=(nw) WaveSizes
+	MAKE/O/T/N=(nW) WaveNames
+	MAKE/O/T/N=(nw) WaveHashes
+	WaveSizes[]= str2num(StringByKey("SIZEINBYTES",WaveInfo(AllWaves[p],0),":",";"))
+	WaveNames[]= GetWavesDataFolder(AllWaves[p],2)
+	FOR (ww=0; ww < nw; ww++)
+		WAVE currWave=AllWaves[ww]
+		IF (Wavetype(currWave,1)<3)
+				WaveHashes[ww] = WaveHash(currWave,3)
+		ENDIF
+	ENDFOR
+	// Display w annotations
+	Display/K=0 WaveSizes
+	Label left "Size (Byte)";DelayUpdate
+	ModifyGraph log(left)=1
+	ModifyGraph mode=3,marker=19,msize=1.5,rgb=(0,0,0)
+	
+	// label outliers
+	WAVESTATS/Q WaveSizes
+	VARIABLE	Thresh=V_avg+V_sdev*1
+	STRING	TagName
+	FOR (ww=0; ww < nw; ww++)
+		IF (WaveSizes[ww] > Thresh)
+			TagName="tag_"+num2istr(ww)
+			Tag/C/N=$TagName/F=0/B=1/H=12/A=LC/L=1 WaveSizes, ww,WaveNames[ww]
+
+		ENDIF
+	ENDFOR
+
+			
+END
+
+FUNCTION/WAVE AddFolders(FolderRefsWave, FolderRef)
+WAVE/DF	FolderRefsWave // contains Df references to all previously discovered folders
+DFRef FolderRef
+
+FolderRefsWave[DimSize(FolderRefsWave,0)]={FolderRef}
+
+// get number of folders inside present folder
+VARIABLE ff, nf=CountObjectsDFR(FolderRef, 4 )
+STRING	fName
+FOR (ff=0; ff< nf; ff++)
+	fName=GetIndexedObjNameDFR(FolderRef, 4, ff )
+	SetDataFolder FolderRef:$fname
+	//SetDataFolder $(":"+fName)
+	AddFolders(FolderRefsWave, GetDataFolderDFR())
+ENDFOR
+
+// this function adds the one FolderRef that is handed over to the wave containing all previous folder refs
+// and it calls itself with each of the fodlers inside itself as reference	  
 END
 	
 // ***************************************************
@@ -588,29 +681,42 @@ FUNCTION SoftColors2(RndInit,[fraction, cyclelength])
 	KillWaves/Z list, rnd,W_SoftC, myColors,FixPnts
 END // soft color 2
 
-FUNCTION ColorByGeo([cyclelength])
-VARIABLE cyclelength
+FUNCTION ColorByGeo([cyclelength, invert])
+VARIABLE cyclelength, invert
 	
 	
 	ColorTab2Wave Geo // creates M_colors with 256 entries 
 						  // I only intend to use entries 4 to 189 (a span of 186)
 	WAVE 			M_colors
-	VARIABLE 		num
+	VARIABLE 		num=0
 	STRING			AllTraces=TraceNameList("", ";", 1 ), CurrTrace
 	VARIABLE		NTraces= ItemsInList(AllTraces,";"), trNum
+	
 	IF (ParamIsDefault(cycleLength))
 		cycleLength=nTraces
 	ENDIF
+	IF (ParamIsDefault(invert))
+		invert=0
+	ENDIF
 
 //	Variable		stepSize = 186/max(5,min(NTraces,cyclelength))   // the 5 assures that the colors are not spread unnecessarily wide 
-														 						// for small numbers of traces
-	Variable		stepSize = 186/cyclelength												 	
-	DO
-		ModifyGraph/Z rgb[num]=(M_colors[4+stepsize*mod(num,cyclelength)][0],M_colors[4+stepsize*mod(num,cyclelength)][1],M_colors[4+stepsize*mod(num,cyclelength)][2])
-		num+=1
-	WHILE	(num < nTraces)
-	ModifyGraph/Z btLen=3
+//														 						// for small numbers of traces
 
+	Variable		stepSize = 186/(cyclelength-1)   // the 5 assures that the colors are not spread unnecessarily wide 
+														 						// for small numbers of traces
+	IF (!invert)
+											 	
+		DO
+			ModifyGraph/Z rgb[num]=(M_colors[4+stepsize*mod(num,cyclelength)][0],M_colors[4+stepsize*mod(num,cyclelength)][1],M_colors[4+stepsize*mod(num,cyclelength)][2])
+			num+=1
+		WHILE	(num < nTraces)
+	ELSE
+		DO
+			ModifyGraph/Z rgb[nTraces-1-num]=(M_colors[4+stepsize*mod(num,cyclelength)][0],M_colors[4+stepsize*mod(num,cyclelength)][1],M_colors[4+stepsize*mod(num,cyclelength)][2])
+			num+=1
+		WHILE	(num < nTraces)
+	ENDIF		
+	ModifyGraph/Z btLen=3
 END
 
 FUNCTION ColorTraceByWave([CB])
@@ -781,7 +887,7 @@ FUNCTION TraceScanner()
 				
 		
 		// add the controls
-		VARIABLE	FontSize=max(6,min(32,(6+winHeight/30)))
+		VARIABLE	FontSize=max(6,min(32,(6+winHeight/45)))
 		VARIABLE	ButtonSize=FontSize*2
 		
 		
@@ -837,14 +943,18 @@ End
 
 FUNCTION NormTraces()
 
-
 // the application case for this function is a graph with N traces 
 
-// 
+// the function goes through all traces of the top graph and 
+// applies a y-normalization according to the criteria entered via
+// the user prompt
+// the function is sensitive to the plotted point range
+// this function does NOT cange the underlying data
 
-	STRING	NormBasis="",NormBasisList="max;min;avg;var;SD;"
-	STRING	Range="Global;Cursors;"
-	STRING	NormType="additive;multiplicative;"
+
+	STRING		NormBasis="",NormBasisList="max;min;avg;var;SD;"
+	STRING		Range="Global;Cursors;"
+	STRING		NormType="additive;multiplicative;"
 	VARIABLE	NormChoice=0
 	VARIABLE	UseCursors=0, multiplicative=0
 	
@@ -863,7 +973,8 @@ FUNCTION NormTraces()
 	
 	STRING		AllTraces=TraceNameList("", ";", 1 ), CurrTrace
 	VARIABLE		NTraces= ItemsInList(AllTraces,";"), trNum
-	VARIABLE 	p1,p2
+	VARIABLE 	p1,p2, pOffset
+	STRING		str_Pstart, strPend
 	FOR (trNum=0; trNum< NTraces; trNum+=1)
 		CurrTrace = StringFromList(trNum,AllTraces,";")
 		WAVE	CurrWave=TraceNameToWaveRef("", CurrTrace )
@@ -873,13 +984,29 @@ FUNCTION NormTraces()
 											
 			WAVE Currwave=GetCopyYW(CurrTrace,"W_FreeW")
 		ENDIF
+		// deal with the case that the trace contains only a subset of the wave,
+		// i.e. the cursor point does not reveal the offset (points 10 to 20 are plotted
+		// cursor A is on the 4th displayed point pcsr(A)=3, so it actually corresponds
+		// to the 13th point of the wave
+		SplitString/E="^\[([[:digit:]]+),([[:digit:]]+)\]$" StringByKey("YRANGE", TraceInfo("", CurrTrace, 0 ) ,":",";"), str_Pstart, strPend
+		IF (strlen(str_Pstart)) // if the string is not empty
+			pOffset = str2num(str_Pstart)
+		ELSE
+			pOffset = 0
+		ENDIF
 		
 		IF (UseCursors)
-			p1=pcsr(A)
-			p2=pcsr(B)
+			p1=pcsr(A)+pOffset
+			p2=pcsr(B)+pOffset
 		ELSE
-			p1=0
-			p2=DimSize(CurrWave,0)-1
+			p1=pOffset
+			IF (strlen(strPend)) // if the string is not empty
+				p2 = str2num(strPend)
+			ELSE
+				p2=DimSize(CurrWave,0)-1
+
+			ENDIF
+
 		ENDIF
 		WAVESTATS/R=[p1,p2]/Q CurrWave
 
@@ -1590,45 +1717,45 @@ STRING		includeString,excludestring
 		ENDFOR
 		print nameOfWave(results)
 		KillWaves/Z Tr_refs //, W_Coef
-END // DblExpFitAllTrace
+END // DblExpFitAllTraces
+
+			
 
 FUNCTION DistributeAxes([spacinginpercent])
 VARIABLE spacinginpercent
-	IF (ParamisDefault(spacinginpercent))
-		spacinginpercent = 0
-	ENDIF
-	STRING Alist= Axislist("")
-	VARIABLE nAxes = ItemsInList(Alist,";")
-	// get axis that are vertical (left or right)
-	VARIABLE aa
-	STRING vAxes="", hAxes="", info,  cAxis 
-	
+
+IF (ParamisDefault(spacinginpercent))
+	spacinginpercent = 1
+ENDIF
+
+STRING AList=   AxisList("")
+VARIABLE nAxes = ItemsInList(AList,";")
+
+// get axis that are vertical (left or right)
+VARIABLE aa
+	STRING vAxes="", hAxes="", info, cAxis
 	FOR (aa=0; aa< nAxes; aa++)
-		cAxis = StringFromList(aa, Alist,";")
-		info = axisinfo("",cAxis)
+		cAxis = StringFromList(aa, AList,";")
+		info =  axisinfo("",cAxis)
 		info = StringByKey("AXTYPE",info,":",";")
-	
-		IF ( (StringMatch(info, "left")) || (StringMatch(info,"right")))
-			vAxes+=cAxis+ ";"
+		IF ( (StringMatch(info, "left" )) || (StringMatch(info, "right" )))
+			vAxes+=cAxis+";"
 		ELSE
 			hAxes += cAxis+";"
 		ENDIF
 	ENDFOR
 	// sort inverse:
-	vAxes=Sortlist(vAxes,";", 17)
-	
+	vAxes=SortList(vAxes,";",17)
 	// now go through vertical axes and distribute them evenly in z
-	VARIABLE nvAxes=ItemsInList(vAxes, ";")
-	VARIABLE FractPerAxis=(1-(nvAxes-1 )*spacinginpercent/100)/(nVAxes) // accounting for the nvAxis -1 gaps
-	STRING RefhAxis = StringFromlist(0,hAxeS,";")
+	VARIABLE	nvAxes=ItemsInList(vAxes,";")
+	VARIABLE FractPerAxis=(1-(nvAxes-1)*spacinginpercent/100)/(nVAxes) // accounting for the nvAxis -1 gaps
+	STRING RefhAxis = StringFromList(0,hAxes,";")
 	FOR (aa=0; aa< nvAxes; aa++)
-		cAxis = StringFromlist(aa,vAxes,";")
-		ModifyGraph axisEnab ($cAxis) ={aa* (fractPerAxis+ spacinginpercent/100),aa* (fractPerAxis+spacinginpercent/100) +fractPerAxis}
-		
-		ModifyGraph freePos($cAxis) = {0,$RefhAxis}
+		cAxis = StringFromList(aa, vAxes,";")
+			ModifyGraph axisEnab($cAxis)={aa*(fractPerAxis+spacinginpercent/100),aa*(fractPerAxis+spacinginpercent/100)+fractPerAxis}
+			ModifyGraph freePos($cAxis)={0,$RefhAxis}
 	
 	ENDFOR
-	
-	MOdifyGraph btlen=3
+	ModifyGraph btLen=3
 
-END			
+END
