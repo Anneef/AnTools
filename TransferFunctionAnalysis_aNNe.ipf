@@ -4601,9 +4601,9 @@ STRING	targetName
 			Note_String=StringByKey("duration", Notiz,":" ,"\r")
 			duration=str2num(Note_String)
 
-			Avg+=STA/SD*duration // possibly SD^2
+			Avg+=STA/(SD^2)*duration // possibly SD^2 but sometimes just SD 
 			totalSTANumber+=1
-			AvgSD+=SD*duration		//  SD^2 if used above
+			AvgSD+=(SD^2)*duration		//  SD^2 if used above
 			totspikes+=nspikes
 			totduration=totduration+duration
 			Note/NOCR Avg,"\t"+ GetWavesDataFolder(STA,2) +"\r"
