@@ -120,6 +120,7 @@ MACRO GainCalculationWrapper()
 	Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled;
 	Gain_avg_scaled/=AC_avg_scaled_splt_FFT
 	Gain_avg_scaled*=cmplx(str2num(StringByKey("total#spikes", note(STA_avg_scaled),":" ,"\r"))/str2num(StringByKey("totalduration", note(STA_avg_scaled),":" ,"\r")),0)
+	Gain_avg_scaled= conj(Gain_avg_scaled)		// fixes the sign of the phase
 	GaussFilter(Gain_avg_scaled)
 	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)
 	
@@ -138,7 +139,85 @@ MACRO GainCalculationWrapper()
 	XeqtInSubs("GaussFilter(Gain_avg_scaled_wC);	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled)")
 END 
 	
+MACRO GainCalculationForSpikeSubset()
+// selects spikes that fullfill a certain criterium
+// i.e. a certain theta phase (and amplitude)
+// start in the folder above all cell folders
+// goes through and creates the avg gain 
 
+	STRING Prefix="OU"
+	STRING CMDSTR
+	STRING PathToFolder=GetDataFolder(1)
+	
+//	CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_V\",\" ReturnSpikeTimes(~,V_Threshold=0, MinISI=0.005) \")",Prefix)
+//	XeqtInSubs(CMDSTR)
+
+	// for every single Spike time wave, use the criteria to create a free wave containing a subset of the spikes and use this as the argument in the STAfromAnalogue call
+	// replacing the full Spike time wave
+// here edit criteria
+	VARIABLE/G root:minPhs=-Pi/4
+	VARIABLE/G root:maxPhs=0
+	VARIABLE/G root:minAmp=0
+	VARIABLE/G root:maxAmp=100
+	CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_I\",\"STRING/G S_Source= \\\"~\\\"; String/G S_Crit0=S_Source[0,strlen(S_Source)-2]+\\\"ThetaPhs\\\"; String/G S_Crit1=S_Source[0,strlen(S_Source)-2]+\\\"ThetaAmp\\\" ;S_Source=S_Source[0,strlen(S_Source)-2]+\\\"ST\\\"; STAfromAnalogue( ~,	WaveSubsetByCriteria($S_Source, $S_Crit0,root:minPhs,root:maxPhs, CriteriumWave1= $S_Crit1,lowCrit1=root:minAmp, upCrit1=root:maxAmp,Logic=\\\"and\\\"), 1,0, Suffix=\\\"STAwC\\\")\")",Prefix)
+	XeqtInSubs(CMDSTR)
+	
+	// create autocorrelation traces for each trial in each subfolder
+	XeqtInSubs("MakeAC()")
+	
+	// Collect all ACs from all subfolders
+	STRING/G FolderACs= ""
+	CMDSTR="Xeqt4WList(\"??Pref??*_AC\" ,\"root:FolderACs+= \\\"§SUBFULL§~;\\\"\")"
+	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
+	XeqtInSubs(CMDSTR)
+	
+	// create the AVG AC from across all folders. Result is in superordinate folder
+	AvgACFromList(FolderACs,"AC_avg_scaled")
+	
+	// collect all spike triggered averages from all subfolders 
+	STRING/G FolderSTAs=""
+	CMDSTR="Xeqt4WList(\"??Pref??*_STAwC\",\"root:FolderSTAs+=\\\"§SUBFULL§~;\\\"\")"
+	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
+	XeqtInSubs(CMDSTR)
+	
+	// create the AVG STA from across all folders. Result is in superordinate folder
+	AvgSTAFromList(FolderSTAs,"STA_avg_scaled_wC")
+	
+	// calculate overall gain for data from all subfolders
+	SplitBeforeFFT(AC_avg_scaled,0)
+	WAVESTATS/Q STA_avg_scaled_wC
+	SplitBeforeFFT(STA_avg_scaled_wC,V_maxloc)
+	FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt
+	FFT/OUT=1/DEST=STA_avg_scaled_wC_splt_FFT STA_avg_scaled_wC_splt
+	Duplicate /O STA_avg_scaled_wC_splt_FFT, Gain_avg_scaled_wC;
+	Gain_avg_scaled_wC/=AC_avg_scaled_splt_FFT
+	Gain_avg_scaled_wC*=cmplx(str2num(StringByKey("total#spikes", note(STA_avg_scaled_wC),":" ,"\r"))/str2num(StringByKey("totalduration", note(STA_avg_scaled_wC),":" ,"\r")),0)
+	Gain_avg_scaled_wC= conj(Gain_avg_scaled_wC)
+	GaussFilter(Gain_avg_scaled_wC)
+	STRING NoteAppendix="\rminPhase:="+num2str(root:minPhs)
+	NoteAppendix+="\rmaxPhase:="+num2str(root:maxPhs)
+	NoteAppendix+="\rminAmplitude:="+num2str(root:minAmp)
+	NoteAppendix+="\rmaxAmplitude:="+num2str(root:maxAmp)
+	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled_wC) + 
+
+	
+	// now create avg AC and STA and gain in each subfolder
+	
+	CMDSTR="STRING/G FolderACs=\"\"; Xeqt4WList(\"??Pref??*_AC\",\"FolderACs+=\\\"~;\\\"\") ; AvgACFromList(FolderACs,\"AC_avg_scaled\")"
+	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+	XeqtInSubs(CMDSTR)
+	CMDSTR="STRING/G FolderSTAs=\"\"; Xeqt4WList(\"??Pref??*_STA\",\"FolderSTAs+=\\\"~;\\\"\") ; AvgSTAFromList(FolderSTAs,\"STA_avg_scaled\")"
+	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+	XeqtInSubs(CMDSTR)
+	
+	XeqtInSubs("SplitBeforeFFT(AC_avg_scaled,0);WAVESTATS/Q STA_avg_scaled;SplitBeforeFFT(STA_avg_scaled,V_maxloc);")
+	XeqtInSubs("FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt;FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt;Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled_wC;")
+	XeqtInSubs("Gain_avg_scaled_wC/=AC_avg_scaled_splt_FFT; Gain_avg_scaled_wC*=cmplx(str2num(StringByKey(\"total#spikes\", note(STA_avg_scaled),\":\" ,\"\\r\"))/str2num(StringByKey(\"totalduration\", note(STA_avg_scaled),\":\" ,\"\\r\")),0) ")
+	XeqtInSubs("GaussFilter(Gain_avg_scaled_wC);	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled)")
+END 
+	
 FUNCTION AssignThetaPhaseToAllSTInFolder()
 
 	STRING	STListofFolder=WaveList("*_ST",";", "DIMS:1,MAXCOLS:1" )	// all the spike time waves 
@@ -5520,6 +5599,125 @@ WAVE	PhaseWave
 
 	Return VS
 END // VSfromPhases
+
+FUNCTION/WAVE WaveSubsetByCriteria(sourceWave, CriteriumWave0, lowCrit0, upCrit0[, CriteriumWave1, lowCrit1, upCrit1, Logic] )
+WAVE		sourceWave, CriteriumWave0, CriteriumWave1
+								// suffix(es) of the waves containing the criterium for stratification, e.g. "mxRt" or "RPD"
+VARIABLE		lowCrit0, upCrit0,lowCrit1, upCrit1					
+								// upper and lower bound(aries) (exclusive) for the value in the criterum wave
+STRING			Logic 			// "and" or "or" 
+// takes a single wave and returns a variant of the wave in which only the entries at certain indicies are kept
+// those indicies are identified by entries in one or two criteria waves:
+// for eligible indicies, the respective entries in the criteria waves fulfill the criteria
+
+// the function is multidimension-aware (for 2D)
+// BUT IT ALWAYS RETURNS A 1D WAVE!
+// that is due to the internal logic here, where elements are selected individually, not entire rows or columns
+	// Check if Waves exist 
+	IF (!WaveExists(sourceWave))
+		Abort "SourceWave " + NameOfWave(sourceWave)+" not found"
+	ELSE
+		Wavestats/M=1/Q SourceWave
+		VARIABLE SourcePnts=V_npnts
+	ENDIF
+	IF (!WaveExists(CriteriumWave0))
+		Abort "CriteriumWave " + NameOfWave(CriteriumWave0)+" not found"
+	ELSE
+		Wavestats/M=1/Q CriteriumWave0
+		VARIABLE Crit0Pnts=V_npnts
+	ENDIF
+	 
+	// Quick health check about wave sizes
+	IF (SourcePnts != Crit0Pnts)
+		Abort "Sourcewave "+NameOfWave(SourceWave)+" and criterium wave "+NameOfWave(CriteriumWave0)+" have different size"
+	ENDIF
+	IF (!ParamIsDefault(CriteriumWave1))
+		// Check if Waves exist 
+		IF (!WaveExists(CriteriumWave1))
+			Abort "CriteriumWave " + NameOfWave(CriteriumWave1)+" not found"
+		ELSE
+			Wavestats/M=1/Q CriteriumWave1
+			VARIABLE Crit1Pnts=V_npnts
+		ENDIF
+		// Quick health check about wave sizes
+	
+		IF (SourcePnts != Crit1Pnts)
+			Abort "Sourcewave "+NameOfWave(SourceWave)+" and criterium wave "+NameOfWave(CriteriumWave1)+" have different size"
+		ENDIF
+		// Quick health check regarding consistent number of criterium values
+		IF ( (ParamIsDefault(lowCrit1)) || (ParamIsDefault(upCrit1)) )
+			Abort "lower or upper bound for criterium 1 was not defined"
+		ENDIF
+		IF (ParamIsDefault(Logic))
+			Abort "You are required to define the logic of combining the two criteria"
+		ENDIF
+	ENDIF
+	
+	// prepare a result wave
+	DFREF		rootFolderRf=GetDataFolderDFR()
+	
+	// create target wave in free data folder
+	
+	SetDataFolder NewFreeDataFolder()
+	
+	MAKE/D/O/N=0 Target
+		
+	SetDataFolder rootFolderRf
+		
+	// create waves that hold entries reflecting fullfilling of criteria
+	
+	MATRIXOP/O Indicies0=within(CriteriumWave0,lowCrit0,upCrit0)	// Returns an array of the same dimensions as w  
+																				// with the value 1 where the corresponding element of w 
+																				// is between low and high (low <= w[i][j] < high) 
+																				// and zero otherwise.
+	Redimension/N=(SourcePnts)	 Indicies0	// make a linear wave (in case it was not 1D)
+	
+																	
+	IF (!ParamIsDefault(CriteriumWave1))
+		MATRIXOP/O Indicies1=within(CriteriumWave1,lowCrit1,upCrit1)	
+		Redimension/N=(SourcePnts)	 Indicies1	// make a linear wave (in case it was not 1D)
+		strswitch(Logic)	// string switch
+			case "and":	// execute if case matches expression
+				Indicies0*=Indicies1							
+				break		// exit from switch
+			case "or":	// execute if case matches expression
+				MATRIXOP/O Indicies0=(Indicies0 || Indicies1)
+				break
+			case "AND":	// execute if case matches expression
+				Indicies0*=Indicies1							
+				break		// exit from switch
+			case "OR":	// execute if case matches expression
+				MATRIXOP/O Indicies0=(Indicies0 || Indicies1)
+				break
+			default:			// optional default expression executed
+				Abort "Give a Logic as 'and' or 'or'"
+		endswitch
+	ENDIF
+	Redimension/L/U Indicies0	// change data type from INT8 to unsigned INT64 (indecies)
+	KillWaves Indicies1
+	
+	// get number of non-zero entries
+	VARIABLE	nHits=sum(Indicies0)
+	IF (nHits<=0)
+		Return target // still an empty wave
+	ENDIF
+	// load index into indicies0
+	Indicies0[]*=p+1
+	
+	// remove entries that are negative:
+
+	Sort Indicies0 Indicies0
+	DeletePoints 0,SourcePnts-nHits,Indicies0
+	Indicies0-=1
+	// now it cointains the indicies of all items for which all criteria are fullfilled
+
+	Redimension/N=(nHits) target
+	target[]=SourceWave[Indicies0[p]]	
+	
+	Return target
+
+END // WaveSubsetByCriteria
+
 
 FUNCTION/WAVE CollectDataByNoteAndCriterium(Suffix[, NoteKey,low4NoteVal, up4NoteVal, CriteriumSuffix, lowCrit, upCrit, CriteriumSuffix1, lowCrit1, upCrit1	] )
 STRING		Suffix
