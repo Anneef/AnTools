@@ -5201,14 +5201,17 @@ FUNCTION CreatePhaseWave(V_Wave[,FirstPoint,LastPoint])
 	WAVE	SPhase=$SPhaseName
 	SPhase=0
 	
-		
+	VARIABLE customFreq
 	// get sine frequency that predominates in injected current --> max of FFT
 	VARIABLE	L_Input=DimSize(I_wave,0)
 	FFT/RP=[0,2*floor(L_Input/2)-1]/OUT=3/DEST=Temp_FFT  I_wave
 	// input needs to have a correct x-scaling
 	
 	REDIMENSION/N=(150000) Temp_FFT
-	WAVESTATS/Q/M=1/R=[1,DimSize(Temp_FFT,0)-1] Temp_FFT
+	// only  look for frequencies larger than 0.25 Hz
+	VARIABLE firstFreqPoint=round(0.25/DimDelta(Temp_FFT,0))
+	
+	WAVESTATS/Q/M=1/R=[firstFreqPoint,DimSize(Temp_FFT,0)-1] Temp_FFT
 	VARIABLE	freq=round(V_maxLoc)
 	VARIABLE	p_freq=V_maxRowLoc
 	
@@ -5220,7 +5223,21 @@ FUNCTION CreatePhaseWave(V_Wave[,FirstPoint,LastPoint])
 	IF (freq==0)
 		// if there was no sine signal embedded, the output is f=0, which we should not 
 		// use to compute phases 
-		freq=NaN
+			DoAlert 0, "Ignored the sine freq in wave "+IName+".\r It was detected to be "+num2str(freq)+" Hz."
+			customFreq=500
+			DoAlert 1, "can you provide a sine frequency?"
+			IF (V_flag==1)
+				Prompt customFreq,"Enter sine frequency : "
+				DoPrompt "Custom choice", customFreq
+				if (V_Flag)
+					freq=NaN
+				else
+					freq=	customFreq
+				endif
+				
+			ELSE
+				freq=NaN
+			ENDIF
 	ELSE
 		// check if that one frequency component does stand out from the surrounding
 		
@@ -5233,10 +5250,11 @@ FUNCTION CreatePhaseWave(V_Wave[,FirstPoint,LastPoint])
 		VARIABLE SD=sqrt(Variance(TEmp_part))
 		// Use a combination of the two measures to exclude 
 		// results from noisy FFTs
-		IF ( (nextHighest/Temp_FFT[p_freq] > 0.4 ) || Temp_FFT[p_freq]/SD < 10 )
+		IF ( (nextHighest/Temp_FFT[p_freq] > 0.5 ) || (Temp_FFT[p_freq]/SD < 3 ) ) 	// might need some adjustments in the two 
+												// hard coded limits 
 		
 			DoAlert 0, "Ignored the sine freq in wave "+IName+".\r It was detected to be "+num2str(freq)+" Hz."
-			VARIABLE	customFreq=500
+			customFreq=500
 			DoAlert 1, "can you provide a sine frequency?"
 			IF (V_flag==1)
 				Prompt customFreq,"Enter sine frequency : "
@@ -5278,6 +5296,7 @@ Function BootstrapVS(PhaseWave[,QuantileWave, quiet, doComplex])
 WAVE		PhaseWave
 WAVE		QuantileWave
 VARIABLE	quiet, doComplex
+// use "docomplex=1" to get the correct confidence interval
 	IF (WaveDims(PhaseWave)>1)
 		Abort "Bootstrap vector strength is not multi-dimensionality aware"
 	ENDIF
@@ -5294,8 +5313,20 @@ VARIABLE	quiet, doComplex
 	ENDIF
 
 	IF (paramisDefault(doComplex))
-		doComplex = 0	
+		doComplex = 1	
 	ENDIF
+	// one problem with the two-dimensional nature of the vector strength (magnitude, phase), is
+	// that testing against zero amplitude is not done properly: 
+	// especially for small numbers of entries, the average vector strength amplitude will always have 
+	// a finite size (1/sqrt(N) for random phases)
+	// and zero magnitude will typically be outside the MAGNITUDE distribution
+	// In order to test properly, the bootstrap has to accoutn for magnitude AND phase of the bootstrap sample
+	// This is done in the following way: 
+	// for the original sample, the average vector (magniutde AND phase) is determined
+	// all bootstrap sample vectors are then PROJECTED onto this vectors axis
+	// such that the resulting vector has the same direction. This means, if it points into the 
+	// same direction (away from zero) as the average vector, it will have a positive length, otherwise a negative length
+	// the boostrap statistics is the distribution of these PROJECTED lengths, not simply the magnitude
 
 	VARIABLE	nEntries=DimSize(PhaseWave,0)
 	VARIABLE	nboots=100000
@@ -5327,14 +5358,14 @@ VARIABLE	quiet, doComplex
 			IF (!doComplex)
 				MultiThread  	BootStats[]=ResampleAndGetVS(PhaseWave, indexWave=Indicies, clmn=p)
 			ELSE
-				MultiThread  	BootStatsC[]=ResampleAndGetVSandPhase(PhaseWave, indexWave=Indicies, clmn=p)
+				MultiThread  	BootStatsC[]=ResampleAndGetVSandPhase(PhaseWave, indexWave=Indicies, clmn=p) // returns in polar form magnitude and angle
 			ENDIF
 			KillWaves/Z Indicies
 		ELSE		// not balanced
 			IF (!doComplex)
 				MultiThread  	BootStats[]=ResampleAndGetVS(PhaseWave)
 			ELSE
-				MultiThread  	BootStatsC[]=ResampleAndGetVSandPhase(PhaseWave)
+				MultiThread  	BootStatsC[]=ResampleAndGetVSandPhase(PhaseWave) // returns in polar form magnitude and angle
 			ENDIF
 		ENDIF
 		
@@ -5357,7 +5388,29 @@ VARIABLE	quiet, doComplex
 			ENDIF
 			KillWaves/Z BootStats
 		ELSE		// doComplex
-			// KillNothing, keep BootStatsC
+			// get average vector from original sample
+			VARIABLE avgPhase= imag(VSandPhasefromPhases(PhaseWave)) // the average phase of the original sample
+			// now project every entry in the Bootstrap sample onto this vector
+			BootStatsC[]=cmplx(real(BootStatsC[p])*cos((imag(BootStatsC[p])-(avgPhase))),0) // the phase does not matter any more
+			Redimension/R BootStatsC
+			// now go ahead with the same statistics as for case without phases
+			
+			IF ((isBalanced) && !quiet)
+				printf "Balanced bootstrap of %g data points with %g re-samples was done.\r",nEntries, nBoots
+			ELSEIF (!quiet)
+				printf "Non-balanced bootstrap of %g data points with %g re-samples was done.\r",nEntries, nBoots
+			ENDIF
+			
+			IF (!quiet)
+				Printf "Bootstrap distribution has the quantiles\r\t%1.3f\t%1.3f\t%1.3f\r",QuantileWave[0],QuantileWave[1],QuantileWave[2]
+			ENDIF
+					
+			QuantilesFromSample(BootStatsC,QuantileWave,1)
+			
+			IF (!quiet)
+				Printf "\r%f\r%f\r%f\r",QuantileWave[0],QuantileWave[1],QuantileWave[2]
+			ENDIF
+			KillWaves/Z BootStatsC
 		ENDIF
 END
 
@@ -5416,11 +5469,11 @@ VARIABLE	clmn			// from the  original wave (PhaseWave) a set of samples is drawn
 		Duplicate/FREE W_Resampled, realPart, cmplxPart
 		Redimension/D realPart, cmplxPart
 		
-		realPart		=	cos(W_Resampled)
+		realPart	=	cos(W_Resampled)
 		cmplxPart	= 	sin(W_Resampled)
 		
 		VARIABLE	rAVG=mean(realPart), cAVG=mean(cmplxPart)
-		VARIABLE/C	VSandPhase	= cmplx(rAVG,cAVG)
+		VARIABLE/C	VSandPhase	= r2polar( cmplx(rAVG,cAVG) )
 		
 		KillWaves/Z realPart, cmplxPart, W_Resampled
 	
