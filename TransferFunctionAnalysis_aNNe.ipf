@@ -27,7 +27,7 @@
 //	23/08/2017	_	aNNe
 //		Added NoiseFloor calculation to BST_Wrapper
 //		BST_Wrapper(200,0)	// zero stands for NO noiseFloor
-//		BST_Wrapper(200,1, earliestST=0.5, latestST=49.5)		// this is doing the nosie floor and earliest and latest conceivable Spike times are provided
+//		BST_Wrapper(200,1, earliestST=0.5, latestST=49.5)		// this is doing the noise floor and earliest and latest conceivable Spike times are provided
 // 	that is not absolutely necessary but would help a bit
 // 	if the STA is 1 s wide, the earliest possible ST is typically 0.5 and the latest duration - 0.5 seconds
 //
@@ -69,6 +69,10 @@
 //			sample is now taken into account, not only the magnitude. A 95% confidence _region_ in phase / magnitude
 //		 	space is determined and the distance of this region from zero magnitude is taken as lower bound for the 
 //			vector strength magnitude
+//
+// 03/08/2020 _ aNNe 
+//			Fixed the sign of the Phase of the gain as calculated in GainCalculationWrapper and in BST_Wrapper
+//			This required replacing gain with its conjugated complex.
 
 
 MACRO GainCalculationWrapper()
@@ -129,9 +133,9 @@ MACRO GainCalculationWrapper()
 	XeqtInSubs(CMDSTR)
 	
 	XeqtInSubs("SplitBeforeFFT(AC_avg_scaled,0);WAVESTATS/Q STA_avg_scaled;SplitBeforeFFT(STA_avg_scaled,V_maxloc);")
-	XeqtInSubs("FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt;FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt;Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled;")
-	XeqtInSubs("Gain_avg_scaled/=AC_avg_scaled_splt_FFT; Gain_avg_scaled*=cmplx(str2num(StringByKey(\"total#spikes\", note(STA_avg_scaled),\":\" ,\"\\r\"))/str2num(StringByKey(\"totalduration\", note(STA_avg_scaled),\":\" ,\"\\r\")),0) ")
-	XeqtInSubs("GaussFilter(Gain_avg_scaled);	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)")
+	XeqtInSubs("FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt;FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt;Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled_wC;")
+	XeqtInSubs("Gain_avg_scaled_wC/=AC_avg_scaled_splt_FFT; Gain_avg_scaled_wC*=cmplx(str2num(StringByKey(\"total#spikes\", note(STA_avg_scaled),\":\" ,\"\\r\"))/str2num(StringByKey(\"totalduration\", note(STA_avg_scaled),\":\" ,\"\\r\")),0) ")
+	XeqtInSubs("GaussFilter(Gain_avg_scaled_wC);	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled)")
 END 
 	
 
@@ -150,7 +154,11 @@ FUNCTION AssignThetaPhaseToAllSTInFolder()
 	WAVE/Wave Irefs=ListToWaveRefWave(IListofFolder,0)
 	
 	MAKE/O/N=(nW)/DF DummyReturn
-	WAVE FiltWave=root:BP_Butter_3p5to10p5_6pole 		// has to exist in the root
+	IF (Exists("root:BP_Butter_3p5to10p5_6pole")==1)	// check whether required filter exists in root
+		WAVE FiltWave=root:BP_Butter_3p5to10p5_6pole 	
+	ELSE
+		Abort "The required filter wave was not found. Aborting"
+	ENDIF
 	MultiThread DummyReturn[]=AssignThetaPhaseToST_WORKER(STrefs[p],Irefs[p], FiltWave)
 	// collect the folders in which the theta amplitudes and phase waves are
 		STRING	ThetaPhaseName, ThetaAmpName, IName, IFiltName
@@ -2800,6 +2808,7 @@ VARIABLE	widthFac		// width of the gaussian filter	; a value of 1 corresponds to
 			KillWaves STA_splt
 			W_G/=FFTofAC
 			W_G*=cmplx(globalRate,0)			
+			W_G=conj(W_G)			// added 03/08/2020 to obtain correct sign of the phase
 
 	
 			//  Will  produce a Magnite and Phase wave
@@ -2867,7 +2876,7 @@ WAVE/D		FreqPoints	// vector with Frequency values at which filtered versions of
 						// FT will be constructed
 VARIABLE	widthFac		// width of the gaussian filter	; a value of 1 corresponds to 
 						// Higgs and Spain's choice of f/2Pi
-		// the optional parameters FreqPoints and widthFac  are supplöied as follows:
+		// the optional parameters FreqPoints and widthFac  are supplied as follows:
 		// GaussFilter(FT,FreqPoints=FrequencyRange, widthFac=1)
 
 // check whether Input is actually a complex wave
@@ -2885,7 +2894,7 @@ VARIABLE	widthFac		// width of the gaussian filter	; a value of 1 corresponds to
 	VARIABLE	nPoints	
 		IF (ParamIsDefault(FreqPoints))
 	           	nPoints = min(floor((DimSize(FT,0) -1)/2), 50)		// max 50 Freq points, but no more than 
-																	// half the number that is there already
+										// half the number that is there already
 			// linear distance in log requires a frequency factor 
 			// to describe construction of the FreqList
 			VARIABLE	freqFac =10^( log(maxf-minf)/(nPoints-1))
@@ -3087,7 +3096,7 @@ END
 
 
 
-FUNCTION SplitBeforeFFT(InWave, SplitTime)
+FUNCTION/WAVE SplitBeforeFFT(InWave, SplitTime)
 WAVE		InWave
 VARIABLE	SplitTime
 // Timepoint according to x-index
@@ -3106,8 +3115,7 @@ VARIABLE	SplitTime
 
 // check whether Split time is inside the x-index
 	IF ( SplitTime < DimOffset(InWave,0)  || SplitTime > pnt2x(InWave,numpnts(InWave)-1) )
-		DoAlert 0, "The intended split time is outside the x-Range of in-wave."
-		Return -1
+		Abort "The intended split time is outside the x-Range of in-wave."
 	ENDIF
 	VARIABLE	dT=DimDelta(Inwave,0)
 
@@ -3135,7 +3143,7 @@ VARIABLE	SplitTime
 	// so we always discard a single point when the FFT is done. This is exactly the point that was duplicated
 	// by accident. Perfect.
 	// however, that is now replaced. (see intro to the function)
-	
+	Return out
 END
 
 
