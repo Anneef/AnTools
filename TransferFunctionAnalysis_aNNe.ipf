@@ -139,12 +139,27 @@ MACRO GainCalculationWrapper()
 	XeqtInSubs("GaussFilter(Gain_avg_scaled_wC);	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled)")
 END 
 	
-MACRO GainCalculationForSpikeSubset()
+MACRO GainCalculationForSpikeSubset(Crit0_suff,Crit1_suff,Crit0_min, Crit0_max, Crit1_min, Crit1_max)
+STRING 		Crit0_suff,Crit1_suff
+VARIABLE	Crit0_min, Crit0_max, Crit1_min, Crit1_max
 // selects spikes that fullfill a certain criterium
 // i.e. a certain theta phase (and amplitude)
 // start in the folder above all cell folders
 // goes through and creates the avg gain 
 
+// the criteria are in waves to be identified based on the base name of the spike time waves
+// by replacing the suffix "ST" with the S_Crit0_suff string
+// if the S_Crit1_suff string is empty, the second critrion is ignored
+
+
+// use cases
+
+// GainCalculationForSpikeSubset("ThetaPhs","ThetaAmpNorm",0, Pi/4, 0.5, 100)
+// GainCalculationForSpikeSubset("ISI","",0.02, 2,0, 0)
+
+	VARIABLE keepSpikeTimesForBootstrap=0
+	
+	
 	STRING Prefix="OU"
 	STRING CMDSTR
 	STRING PathToFolder=GetDataFolder(1)
@@ -152,29 +167,63 @@ MACRO GainCalculationForSpikeSubset()
 //	CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_V\",\" ReturnSpikeTimes(~,V_Threshold=0, MinISI=0.005) \")",Prefix)
 //	XeqtInSubs(CMDSTR)
 
-	// for every single Spike time wave, use the criteria to create a free wave containing a subset of the spikes and use this as the argument in the STAfromAnalogue call
+	// for every single Spike time wave, use the criteria to create a permanent wave containing a subset of the spikes and use this as the argument in the STAfromAnalogue call
 	// replacing the full Spike time wave
 // here edit criteria
-	VARIABLE/G root:minPhs=-Pi/4
-	VARIABLE/G root:maxPhs=0
-	VARIABLE/G root:minAmp=0
-	VARIABLE/G root:maxAmp=100
-	CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_I\",\"STRING/G S_Source= \\\"~\\\"; String/G S_Crit0=S_Source[0,strlen(S_Source)-2]+\\\"ThetaPhs\\\"; String/G S_Crit1=S_Source[0,strlen(S_Source)-2]+\\\"ThetaAmp\\\" ;S_Source=S_Source[0,strlen(S_Source)-2]+\\\"ST\\\"; STAfromAnalogue( ~,	WaveSubsetByCriteria($S_Source, $S_Crit0,root:minPhs,root:maxPhs, CriteriumWave1= $S_Crit1,lowCrit1=root:minAmp, upCrit1=root:maxAmp,Logic=\\\"and\\\"), 1,0, Suffix=\\\"STAwC\\\")\")",Prefix)
-	XeqtInSubs(CMDSTR)
+	VARIABLE/G root:V_crit0_min=Crit0_min
+	VARIABLE/G root:V_crit0_max=Crit0_max
+
+	STRING/G		root:S_crit0_Suff = Crit0_suff
 	
-	// create autocorrelation traces for each trial in each subfolder
-	XeqtInSubs("MakeAC()")
+	// the note that will be applied to the resulting STA and gain
+	STRING NoteAppendix
+	NoteAppendix=Crit0_suff+"_min:="+num2str(Crit0_min)+"\r"
+	NoteAppendix+=Crit0_suff+"_max:="+num2str(Crit0_max)+"\r"
+
+	IF (strlen(Crit1_suff)>0)	// apply a second criteriun
+		VARIABLE/G root:V_crit1_min=Crit1_min
+		VARIABLE/G root:V_crit1_max=Crit1_max
 	
-	// Collect all ACs from all subfolders
-	STRING/G FolderACs= ""
-	CMDSTR="Xeqt4WList(\"??Pref??*_AC\" ,\"root:FolderACs+= \\\"§SUBFULL§~;\\\"\")"
-	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
-	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
-	XeqtInSubs(CMDSTR)
+		STRING/G		root:S_crit1_Suff = Crit1_suff
+		STRING/G		root:S_crit0_Suff = Crit0_suff		
+		IF (!keepSpikeTimesForBootstrap)
+			// use spike times with criterium not as explicit wave but only as free waves handed over 
+			CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_I\",\"STRING/G S_Source= \\\"~\\\"; String/G S_Crit0=S_Source[0,strlen(S_Source)-2]+root:S_crit0_Suff; String/G S_Crit1=S_Source[0,strlen(S_Source)-2]+root:S_crit1_Suff ;S_Source=S_Source[0,strlen(S_Source)-2]+\\\"ST\\\"; STAfromAnalogue( ~,	WaveSubsetByCriteria($S_Source, $S_Crit0,root:V_crit0_min,root:V_crit0_max, CriteriumWave1= $S_Crit1,lowCrit1=root:V_crit1_min, upCrit1=root:V_crit1_max,Logic=\\\"and\\\"), 1,0, Suffix=\\\"STAwC\\\")\")",Prefix)
+		ELSE
+			// first create STwC waves
+			CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_ST\",\"STRING/G S_Source= \\\"~\\\"; String/G S_Crit0=S_Source[0,strlen(S_Source)-3]+root:S_crit0_Suff; String/G S_Crit1=S_Source[0,strlen(S_Source)-3]+root:S_crit1_Suff ; Duplicate/O 	WaveSubsetByCriteria(~, $S_Crit0,root:V_crit0_min,root:V_crit0_max, CriteriumWave1= $S_Crit1,lowCrit1=root:V_crit1_min, upCrit1=root:V_crit1_max,Logic=\\\"and\\\") , $(\\\"~\\\"+\\\"wC\\\")\")",Prefix)
+			CMDSTR+=";"+ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_I\",\"STRING/G S_Source= \\\"~\\\";S_Source=S_Source[0,strlen(S_Source)-2]+\\\"STwC\\\"; STAfromAnalogue( ~,	$S_Source, 1,0, Suffix=\\\"STAwC\\\")\")",Prefix)
+		ENDIF
+		NoteAppendix+=Crit1_suff+"_min:="+num2str(Crit1_min)+"\r"
+		NoteAppendix+=Crit1_suff+"_max:="+num2str(Crit1_max)+"\r"
+	ELSE		// apply only one criterium
+				// FOR instance for selecting by ISI 
+
+		IF (!keepSpikeTimesForBootstrap)
+			CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_I\",\"STRING/G S_Source= \\\"~\\\"; String/G S_Crit0=S_Source[0,strlen(S_Source)-2]+root:S_crit0_Suff; S_Source=S_Source[0,strlen(S_Source)-2]+\\\"ST\\\"; STAfromAnalogue( ~,	WaveSubsetByCriteria($S_Source, $S_Crit0,root:V_crit0_min,root:V_crit0_max), 1,0, Suffix=\\\"STAwC\\\")\")",Prefix)
+
+		ELSE
+		
+			CMDSTR=ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_ST\",\"STRING/G S_Source= \\\"~\\\"; String/G S_Crit0=S_Source[0,strlen(S_Source)-3]+root:S_crit0_Suff; Duplicate/O WaveSubsetByCriteria(~, $S_Crit0,root:V_crit0_min,root:V_crit0_max),$(\\\"~\\\"+\\\"wC\\\")\")",Prefix)
+			CMDSTR+=";"+ReplaceString("??Pref??","Xeqt4WList(\"??Pref??*_I\",\"STRING/G S_Source= \\\"~\\\"; String/G S_Crit0=S_Source[0,strlen(S_Source)-2]+root:S_crit0_Suff; S_Source=S_Source[0,strlen(S_Source)-2]+\\\"STwC\\\"; STAfromAnalogue( ~,	$S_Source, 1,0, Suffix=\\\"STAwC\\\")\")",Prefix)
+		ENDIF
+	ENDIF
+		
+XeqtInSubs(CMDSTR)
 	
-	// create the AVG AC from across all folders. Result is in superordinate folder
-	AvgACFromList(FolderACs,"AC_avg_scaled")
-	
+//	// create autocorrelation traces for each trial in each subfolder
+//	XeqtInSubs("MakeAC()")
+//	
+//	// Collect all ACs from all subfolders
+//	STRING/G FolderACs= ""
+//	CMDSTR="Xeqt4WList(\"??Pref??*_AC\" ,\"root:FolderACs+= \\\"§SUBFULL§~;\\\"\")"
+//	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+//	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
+//	XeqtInSubs(CMDSTR)
+//	
+//	// create the AVG AC from across all folders. Result is in superordinate folder
+//	AvgACFromList(FolderACs,"AC_avg_scaled")
+//	
 	// collect all spike triggered averages from all subfolders 
 	STRING/G FolderSTAs=""
 	CMDSTR="Xeqt4WList(\"??Pref??*_STAwC\",\"root:FolderSTAs+=\\\"§SUBFULL§~;\\\"\")"
@@ -182,7 +231,7 @@ MACRO GainCalculationForSpikeSubset()
 	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
 	XeqtInSubs(CMDSTR)
 	
-	// create the AVG STA from across all folders. Result is in superordinate folder
+//	// create the AVG STA from across all folders. Result is in superordinate folder
 	AvgSTAFromList(FolderSTAs,"STA_avg_scaled_wC")
 	
 	// calculate overall gain for data from all subfolders
@@ -191,31 +240,31 @@ MACRO GainCalculationForSpikeSubset()
 	SplitBeforeFFT(STA_avg_scaled_wC,V_maxloc)
 	FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt
 	FFT/OUT=1/DEST=STA_avg_scaled_wC_splt_FFT STA_avg_scaled_wC_splt
+
 	Duplicate /O STA_avg_scaled_wC_splt_FFT, Gain_avg_scaled_wC;
+
 	Gain_avg_scaled_wC/=AC_avg_scaled_splt_FFT
 	Gain_avg_scaled_wC*=cmplx(str2num(StringByKey("total#spikes", note(STA_avg_scaled_wC),":" ,"\r"))/str2num(StringByKey("totalduration", note(STA_avg_scaled_wC),":" ,"\r")),0)
 	Gain_avg_scaled_wC= conj(Gain_avg_scaled_wC)
 	GaussFilter(Gain_avg_scaled_wC)
-	STRING NoteAppendix="\rminPhase:="+num2str(root:minPhs)
-	NoteAppendix+="\rmaxPhase:="+num2str(root:maxPhs)
-	NoteAppendix+="\rminAmplitude:="+num2str(root:minAmp)
-	NoteAppendix+="\rmaxAmplitude:="+num2str(root:maxAmp)
-	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled_wC) + 
 
+	Note/K Gain_avg_scaled_wC_MgFlt
+	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled_wC) + NoteAppendix
+	note/K STA_avg_scaled_wC,note(Gain_avg_scaled_wC_MgFlt)
 	
-	// now create avg AC and STA and gain in each subfolder
-	
-	CMDSTR="STRING/G FolderACs=\"\"; Xeqt4WList(\"??Pref??*_AC\",\"FolderACs+=\\\"~;\\\"\") ; AvgACFromList(FolderACs,\"AC_avg_scaled\")"
-	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
-	XeqtInSubs(CMDSTR)
-	CMDSTR="STRING/G FolderSTAs=\"\"; Xeqt4WList(\"??Pref??*_STA\",\"FolderSTAs+=\\\"~;\\\"\") ; AvgSTAFromList(FolderSTAs,\"STA_avg_scaled\")"
-	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
-	XeqtInSubs(CMDSTR)
-	
-	XeqtInSubs("SplitBeforeFFT(AC_avg_scaled,0);WAVESTATS/Q STA_avg_scaled;SplitBeforeFFT(STA_avg_scaled,V_maxloc);")
-	XeqtInSubs("FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt;FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt;Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled_wC;")
-	XeqtInSubs("Gain_avg_scaled_wC/=AC_avg_scaled_splt_FFT; Gain_avg_scaled_wC*=cmplx(str2num(StringByKey(\"total#spikes\", note(STA_avg_scaled),\":\" ,\"\\r\"))/str2num(StringByKey(\"totalduration\", note(STA_avg_scaled),\":\" ,\"\\r\")),0) ")
-	XeqtInSubs("GaussFilter(Gain_avg_scaled_wC);	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled)")
+//	// now create avg AC and STA and gain in each subfolder
+//	
+//	CMDSTR="STRING/G FolderACs=\"\"; Xeqt4WList(\"??Pref??*_AC\",\"FolderACs+=\\\"~;\\\"\") ; AvgACFromList(FolderACs,\"AC_avg_scaled\")"
+//	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+//	XeqtInSubs(CMDSTR)
+//	CMDSTR="STRING/G FolderSTAs=\"\"; Xeqt4WList(\"??Pref??*_STA\",\"FolderSTAs+=\\\"~;\\\"\") ; AvgSTAFromList(FolderSTAs,\"STA_avg_scaled\")"
+//	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+//	XeqtInSubs(CMDSTR)
+//	
+//	XeqtInSubs("SplitBeforeFFT(AC_avg_scaled,0);WAVESTATS/Q STA_avg_scaled;SplitBeforeFFT(STA_avg_scaled,V_maxloc);")
+//	XeqtInSubs("FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt;FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt;Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled_wC;")
+//	XeqtInSubs("Gain_avg_scaled_wC/=AC_avg_scaled_splt_FFT; Gain_avg_scaled_wC*=cmplx(str2num(StringByKey(\"total#spikes\", note(STA_avg_scaled),\":\" ,\"\\r\"))/str2num(StringByKey(\"totalduration\", note(STA_avg_scaled),\":\" ,\"\\r\")),0) ")
+//	XeqtInSubs("GaussFilter(Gain_avg_scaled_wC);	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled)")
 END 
 	
 FUNCTION AssignThetaPhaseToAllSTInFolder()
