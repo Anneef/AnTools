@@ -8,6 +8,9 @@
 // 03/07/18 aNNe  -  In function Xeqt4List: added Line 57: Sort the list : Case-insensitive alphanumeric sort that sorts wave0 and wave9 before wave10.
 //
 // 16/07/20 aNNe  -  NormTraces is now aware of the point range plotted
+// 12/4/21  aNNe  -  In the Xeqt4List and Xeqt4WList it is now possible to programmatically modify the strings from the list before they are introduced to the command line at
+//		instances of '~'. to this end, use §~rmvendX§ , where 'X' is the letter or number or underscore, with which the ENDING starts that is being removed. 
+//		importantly, it is the last occurrence of this letter (number etc.) in the string that is considered
 
 Menu "Macros"
 		Submenu "Repetitive Tasks"
@@ -45,6 +48,52 @@ FUNCTION	EvokeExecForList()
 	Xeqt4List(Liste,SkipListe,FullPath, Cmd)
 END
 
+FUNCTION/S ReplaceTokenRemovingEnd(regEx, SourceString, Replacement)
+	STRING	regEx,SourceString, Replacement
+	// performs a string replacement in SourceString
+	// searches for a match with the regExprStr "regEx"
+	// then replaces with Replacement, but possibly modifies it before 
+	IF (GrepString(SourceString,regEx )!=1)
+		Return SourceString
+	ENDIF
+	
+	// prepare the replacement OP
+	STRING pre=""
+	STRING sep=""
+	STRING post=""
+	STRING SpecialSep
+	STRING TruncatedReplacement
+	VARIABLE	finish=0
+	DO
+		pre=""
+		sep=""
+		post=""
+		
+		SplitString/E=regEx SourceString, pre,sep,post
+		// now replace the center with the Replacement string after removing its end
+		// first make sure, the separation character has no special meaning in regEx:
+		IF (GrepString(sep,sep)==1)	// all fine
+			SpecialSep=Sep
+		ELSE	// the sep string ha a special meaning in regEx
+			SpecialSep="\\"+sep // add a leading escape character
+			IF (GrepString(sep,SpecialSep)!=1)	// could not be repaired
+				print " problem with special punctuation character: "+sep
+				Return ""
+			ENDIF
+		ENDIF
+		IF (GrepString(Replacement,SpecialSep ))   // the replacement contains at least one 
+															 // character that separates the suffix
+			SplitString/E="(.*)"+SpecialSep+".*" Replacement, TruncatedReplacement
+			SourceString= pre+TruncatedReplacement+post
+		ELSE
+			finish=1
+		ENDIF
+	
+	WHILE ( (GrepString(SourceString,regEx )==1) & (!finish))
+	
+	Return SourceString
+END // ReplaceTokenRemovingEnd
+
 FUNCTION	Xeqt4List(Liste,SkipList, FullPath, Cmd)
 STRING		Liste, SkipList
 STRING		Cmd
@@ -54,12 +103,13 @@ VARIABLE	fullPath
 	//	\~ 	--> ~
 	// ~  	--> wavename from the list
 	// §	--> index of the wave in the list 
+	// §~rmvend_§	--> WaveName with characters removed after last "_"
 	
 	// option: add full path name before wave name
 	STRING	FP=GetDataFolder(1)
 	VARIABLE	k, NumEntries=ItemsInList(SkipList, ";")
 	FOR (k=0; k<NumEntries;k+=1)
-		print StringFromList(k, SkipList,";") 
+		//print StringFromList(k, SkipList,";") 
 		Liste=RemoveFromList(StringFromList(k, SkipList,";") , Liste,";")
 	ENDFOR
 	Liste=SortList(Liste, ";",16)
@@ -70,14 +120,22 @@ VARIABLE	fullPath
 
 	FOR (k=0; k<NumEntries;k+=1)
 		IF (fullPath)
-			cCmd=ReplaceString("~", cmd, FP+StringFromList(k, Liste,";") )
+			cCmd=ReplaceTokenRemovingEnd("(.*)§~rmvend([[:word:]]){1,1}§(.*)", cmd, FP+StringFromList(k, Liste,";"))
+			// this allows use of strings in the list, AFTER THERE ENDING WAS REMOVED
+			// what counts as ending is defined by the appearance of a single letter (number or underscore)
+			// the ending starts with the last occurance of this letter in the string from the list
+			// the regex says: the exact string "§~rmvend" followed by exactly one word character (underscore or any character that is a letter or digit)
+			// and a "§"
+			// the expression before and after this one word character (last occurence in are read out as a subpattern. Those CANNOT contain a newline character!
+			cCmd=ReplaceString("~", cCmd, FP+StringFromList(k, Liste,";") )
 			cCmd=ReplaceString("+\+", cCmd, "~")
 
 //			cCmd=ReplaceString("~", Cmd, FP+StringFromList(k, Liste,";") )
 			
 
 		ELSE
-			cCmd=ReplaceString("~", cmd, StringFromList(k, Liste,";") )
+			cCmd=ReplaceTokenRemovingEnd("(.*)§~rmvend([[:word:]]){1,1}§(.*)", cmd, StringFromList(k, Liste,";")) // see last case
+			cCmd=ReplaceString("~", cCmd, StringFromList(k, Liste,";") )
 			cCmd=ReplaceString("+\+", cCmd, "~")
 //			cCmd=ReplaceString("~", Cmd, StringFromList(k, Liste,";") )
 		ENDIF
@@ -101,7 +159,6 @@ VARIABLE	fullPath
 	ENDFOR
 
 END
-
 // -   -   -   -   -   -   -   -   -   -
 FUNCTION	Xeqt4WList(TargetStr, Cmd)
 STRING		TargetStr
