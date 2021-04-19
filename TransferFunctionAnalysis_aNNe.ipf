@@ -73,6 +73,11 @@
 // 03/08/2020 _ aNNe 
 //			Fixed the sign of the Phase of the gain as calculated in GainCalculationWrapper and in BST_Wrapper
 //			This required replacing gain with its conjugated complex.
+//
+// 01/04/2021 _ aNNe 
+//			When using stratiying analysis, selecting spikes by one or two criteria (GainCalculationWrapperForSpikeSubset)
+//			There is a new option to keep those ST waves (with suffix ST_wC) to run Bootstrap. The Bootstrap Wrapper how accepts 
+//			a suffix to signal on which dataset botstrap should run (full or stratified)
 
 
 MACRO GainCalculationWrapper()
@@ -120,28 +125,28 @@ MACRO GainCalculationWrapper()
 	Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled;
 	Gain_avg_scaled/=AC_avg_scaled_splt_FFT
 	Gain_avg_scaled*=cmplx(str2num(StringByKey("total#spikes", note(STA_avg_scaled),":" ,"\r"))/str2num(StringByKey("totalduration", note(STA_avg_scaled),":" ,"\r")),0)
-	Gain_avg_scaled= conj(Gain_avg_scaled)		// fixes the sign of the phase
+	Gain_avg_scaled= conj(Gain_avg_scaled)	// fixes the sign of the phase
 	GaussFilter(Gain_avg_scaled)
 	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)
 	
-	// now create avg AC and STA and gain in each subfolder
-	
-	CMDSTR="STRING/G FolderACs=\"\"; Xeqt4WList(\"??Pref??*_AC\",\"FolderACs+=\\\"~;\\\"\") ; AvgACFromList(FolderACs,\"AC_avg_scaled\")"
-	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
-	XeqtInSubs(CMDSTR)
-	CMDSTR="STRING/G FolderSTAs=\"\"; Xeqt4WList(\"??Pref??*_STA\",\"FolderSTAs+=\\\"~;\\\"\") ; AvgSTAFromList(FolderSTAs,\"STA_avg_scaled\")"
-	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
-	XeqtInSubs(CMDSTR)
-	
-	XeqtInSubs("SplitBeforeFFT(AC_avg_scaled,0);WAVESTATS/Q STA_avg_scaled;SplitBeforeFFT(STA_avg_scaled,V_maxloc);")
-	XeqtInSubs("FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt;FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt;Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled_wC;")
-	XeqtInSubs("Gain_avg_scaled_wC/=AC_avg_scaled_splt_FFT; Gain_avg_scaled_wC*=cmplx(str2num(StringByKey(\"total#spikes\", note(STA_avg_scaled),\":\" ,\"\\r\"))/str2num(StringByKey(\"totalduration\", note(STA_avg_scaled),\":\" ,\"\\r\")),0) ")
-	XeqtInSubs("GaussFilter(Gain_avg_scaled_wC);	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled)")
+//	// now create avg AC and STA and gain in each subfolder
+//	
+//	CMDSTR="STRING/G FolderACs=\"\"; Xeqt4WList(\"??Pref??*_AC\",\"FolderACs+=\\\"~;\\\"\") ; AvgACFromList(FolderACs,\"AC_avg_scaled\")"
+//	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+//	XeqtInSubs(CMDSTR)
+//	CMDSTR="STRING/G FolderSTAs=\"\"; Xeqt4WList(\"??Pref??*_STA\",\"FolderSTAs+=\\\"~;\\\"\") ; AvgSTAFromList(FolderSTAs,\"STA_avg_scaled\")"
+//	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+//	XeqtInSubs(CMDSTR)
+//	
+//	XeqtInSubs("SplitBeforeFFT(AC_avg_scaled,0);WAVESTATS/Q STA_avg_scaled;SplitBeforeFFT(STA_avg_scaled,V_maxloc);")
+//	XeqtInSubs("FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt;FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt;Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled;")
+//	XeqtInSubs("Gain_avg_scaled/=AC_avg_scaled_splt_FFT; Gain_avg_scaled*=cmplx(str2num(StringByKey(\"total#spikes\", note(STA_avg_scaled),\":\" ,\"\\r\"))/str2num(StringByKey(\"totalduration\", note(STA_avg_scaled),\":\" ,\"\\r\")),0) ")
+//	XeqtInSubs("GaussFilter(Gain_avg_scaled);	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)")
 END 
 	
 MACRO GainCalculationForSpikeSubset(Crit0_suff,Crit1_suff,Crit0_min, Crit0_max, Crit1_min, Crit1_max)
 STRING 		Crit0_suff,Crit1_suff
-VARIABLE	Crit0_min, Crit0_max, Crit1_min, Crit1_max
+VARIABLE		Crit0_min, Crit0_max, Crit1_min, Crit1_max
 // selects spikes that fullfill a certain criterium
 // i.e. a certain theta phase (and amplitude)
 // start in the folder above all cell folders
@@ -267,6 +272,7 @@ XeqtInSubs(CMDSTR)
 //	XeqtInSubs("GaussFilter(Gain_avg_scaled_wC);	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled)")
 END 
 	
+
 FUNCTION AssignThetaPhaseToAllSTInFolder()
 
 	STRING	STListofFolder=WaveList("*_ST",";", "DIMS:1,MAXCOLS:1" )	// all the spike time waves 
@@ -282,8 +288,8 @@ FUNCTION AssignThetaPhaseToAllSTInFolder()
 	WAVE/Wave Irefs=ListToWaveRefWave(IListofFolder,0)
 	
 	MAKE/O/N=(nW)/DF DummyReturn
-	IF (Exists("root:BP_Butter_3p5to10p5_6pole")==1)	// check whether required filter exists in root
-		WAVE FiltWave=root:BP_Butter_3p5to10p5_6pole 	
+	IF (Exists("root:BP_Butter_3p5to10p5_6pole")==1)
+		WAVE FiltWave=root:BP_Butter_3p5to10p5_6pole 		// has to exist in the root
 	ELSE
 		Abort "The required filter wave was not found. Aborting"
 	ENDIF
@@ -1476,7 +1482,7 @@ VARIABLE	RateThresh				// threshold value for dV/dt to define onset
 		VARIABLE		nSpikes=DimSize(InWave_ST,0), sp, sPnt// Pnt number in Voltage wave where spike was detected
 		VARIABLE	 	nPntsBefore, nPntsAfter, upsamplefac=round(100000*dt)// stretch of data before and after that is copied for analysis
 																			// factor of how much the temporal sampling is increased
-		VARIABLE		nPntsInDummy, SlopeMaxWasApplied=0, SlopeMax=300000
+		VARIABLE		nPntsInDummy, SlopeMaxWasApplied=0, SlopeMax=3000000
 		FOR (sp=0; sp< nSpikes; sp +=1)
 			
 			// copy a stretch of voltages around the detection point
@@ -1982,7 +1988,7 @@ ENDIF
 
 // quick health check: dV/dt should not be larger than say 2000 V/s
 	Differentiate InWave/D=Dummy;
-	IF (wavemax(Dummy)>2000 ||  wavemin(Dummy)<-400 ) 
+	IF (wavemax(Dummy)>2000 ||  wavemin(Dummy)<-600 ) 
 // there are probably artefacts
 		KillWaves/Z Dummy
 		DoAlert 0,"Presumed artefact in "+GetWavesDataFolder(InWave,2)
@@ -2100,6 +2106,11 @@ VARIABLE		FirstPoint, LastPoint	// to deal with the data from Omer, where only s
 			Print "Aborting STA from analogue, couldn't find SpikeTimes"+ NameOfWave(SpikeTimes)
 				Return -1
 		ENDIF
+		// check for having more than zero spikes
+		IF (DimSize(SpikeTimes,0)<1)
+			Print "Aborting STA from analogue, SpikeTime wave was empty "+ NameOfWave(SpikeTimes) + NameOfWave(AnalogueTrace)
+			Return -1
+		ENDIF
 		
 		
 		VARIABLE	AT_Zero= DimOffset(AnalogueTrace,0)
@@ -2168,6 +2179,160 @@ VARIABLE		FirstPoint, LastPoint	// to deal with the data from Omer, where only s
 			ENDIF
 		ENDFOR
 		avg/=n1  //divide by #spikes
+		// if there are no points in ST, return -1, delete STA wave
+		IF (n1<1)
+			KillWaves avg
+			Return -2
+		ENDIF
+
+
+// place some info in the Wave note 
+		Wavestats/R=[FirstPoint, min(DimSize(AnalogueTrace,0)-1,LastPoint)]/Q AnalogueTrace
+		String wavnote="STA from "+ NameOfWave(AnalogueTrace)
+		wavnote +=" triggered on the "+num2istr(n1)+" spikes in "+NameOfWave(SpikeTimes)+".\r"
+		wavnote +="spikerate:"+num2str(n1/nInAna/DimDelta(AnalogueTrace,0))+"\r"
+		wavnote +="#spikes:"+num2str(n1)+"\r"
+		wavnote +="duration:"+num2str(DimDelta(AnalogueTrace,0)*nInAna)+"\r" // sweep length
+		wavnote +="AVG:"+ num2str(V_avg)+"\rSD:"+num2str(V_sdev)+"\r"
+		
+		Note/K avg
+		Note  avg, wavnote
+		
+		// as the time intervall over which spikes occur could be much shorter than the total duration of the analogue trace,  only 
+		// the time intervall between first and last included spike is used for rate calculation in the line above
+
+		// calc stv
+		IF (DoSpikeTrigVar)
+			n2=0
+			FOR (k=0; k< nSp; k+=1)
+				p1=x2pnt(AnalogueTrace, SpikeTimes[k] )-(pRange-1)/2
+				p2=p1+pRange-1
+				IF ( (p1>=0) && (p2< nInAna) )
+					var[0,pRange-1]+=(AnalogueTrace[p+p1]-avg[p])^2
+					n2+=1
+				ENDIF
+			ENDFOR
+			var/=n2-1
+			IF (n2!=n1)
+				// DoAlert 0,"Different number of spikes accounted for on the two iterations, abort"
+				avg=0
+				var=0
+				return -1
+			ENDIF
+			Note/K var
+			Note   var, wavnote
+
+		ENDIF 	// if DoSpikeTrigVar
+		
+
+
+END
+
+FUNCTION 	STAfromAnalogueNONThreadsafe(AnalogueTrace,SpikeTimes, Range,DoSpikeTrigVar,[ Suffix, FirstPoint, LastPoint])
+// calculates Spike triggered average of the snipletts (length 'range') of the Analogue trace
+// the snipletts are centered around the entries of spike Times
+// range has to have the same unit as the analogue data 
+// the setscale command assumes it is "s"
+// if DoSpikeTrigVar is not ZERO, the spike triggered variance is calculated
+WAVE			AnalogueTrace, SpikeTimes
+VARIABLE		Range, DoSpikeTrigVar
+STRING		Suffix						// the suffix placed at the end of the name of the resulting wave
+VARIABLE		FirstPoint, LastPoint	// to deal with the data from Omer, where only some part of the current can be used 
+												// due to the limitations of pClamp
+												// here it will be only needed to determine with spikes 
+												// can be used to calculate the STA
+												// because there is sufficient current available before and after the spike
+												
+		IF (ParamIsDefault(FirstPoint))
+			FirstPoint = 0
+		ENDIF
+		// check for existance
+		IF (!Waveexists(AnalogueTrace))
+			Print  "Aborting STA from analogue, could not find AnalogueTrace"+ NameOfWave(AnalogueTrace)
+			Return -1
+		ELSEIF (!WaveExists(SpikeTimes))
+			Print "Aborting STA from analogue, couldn't find SpikeTimes"+ NameOfWave(SpikeTimes)
+			Return -1
+		ENDIF
+		// check for having more than zero spikes
+		IF (DimSize(SpikeTimes,0)<1)
+			Print "Aborting STA from analogue, SpikeTime wave was empty "+ NameOfWave(SpikeTimes) + NameOfWave(AnalogueTrace)
+			Return -1
+		ENDIF
+		
+		VARIABLE	AT_Zero= DimOffset(AnalogueTrace,0)
+		VARIABLE	AT_deltaT=DimDelta(AnalogueTrace,0)
+		VARIABLE	nInAna=DimSize(AnalogueTrace,0)-FirstPoint
+		IF (!ParamIsDefault(LastPoint))	// if there is a limitation as to how many points of the
+													// stimulus can be used for analysis (in case of pClamp limitations)
+													
+			nInAna -= DimSize(AnalogueTrace,0)-1-min(DimSize(AnalogueTrace,0)-1,LastPoint)
+		ELSE
+			LastPoint=DimSize(AnalogueTrace,0)-1
+		ENDIF
+		
+		IF (ParamIsDefault(Suffix))
+			Suffix = "STA"
+		ENDIF
+		
+		
+//		IF ( abs(SpikeTimes[0]-AT_Zero) > 2 )
+//			DoAlert 1,"Zero time of analogue trace is rather different from first spike time, ("+num2str(SpikeTimes[0]-AT_Zero)+"s). Continue anyway?"
+//			IF (V_flag==2)	// Continue
+//				Return -1
+//			ENDIF
+//		ENDIF
+		
+		VARIABLE		k, nSp=DimSize(Spiketimes,0)
+		VARIABLE 	pRange=2*round(range/AT_deltaT/2)+1
+		VARIABLE		p1, p2,n1, n2
+		
+		STRING		ST_Name=NameOfWave(SpikeTimes)
+		STRING		I_Name=NameOfWave(AnalogueTrace)
+		STRING		STA_Name
+		STRING		Ending = StringFromList(ItemsInList(I_Name,"_")-1,I_Name,"_")
+//		IF (cmpstr("ST", StringFromList(ItemsInList(ST_Name,"_")-1,ST_Name,"_")) ==0)
+			 STA_Name=RemoveEnding(I_Name,Ending)+Suffix
+//		ELSE
+//			STA_Name=ST_Name+"_STA"
+//		ENDIF
+		MAKE/D/O/N=(pRange) $STA_Name
+		WAVE avg=$STA_Name
+	
+		avg=0
+		SetScale/P x -(pRange-1)/2*AT_deltaT,AT_deltaT,"s", avg
+
+		IF (DoSpikeTrigVar)
+			MAKE/D/O/N=(pRange) $(NameOfWave(SpikeTimes)+"_STV")
+			WAVE var=$(NameOfWave(SpikeTimes)+"_STV")
+			var=0
+			SetScale/P x -(pRange-1)/2*AT_deltaT,AT_deltaT,"s", avg, var
+		ENDIF
+		n1=0
+		
+		VARIABLE	firstST=SpikeTimes[nSp-1]			// first Spike time to be included in analysis
+		VARIABLE	lastST=SpikeTimes[0]				// last Spike time to be included in analysis
+			
+		// calc avg
+		FOR (k=0; k< nSp; k+=1)
+			// not every spike can be used: the onces too close to begin or end of the stimulus
+			// cannot be used for the STA as the input is not completely known over the neccessary range
+			p1=x2pnt(AnalogueTrace, SpikeTimes[k] )-(pRange-1)/2
+			p2=p1+pRange-1
+			IF ( (p1>=FirstPoint) && (p2< FirstPoint+nInAna) ) // if input is available for the entire range needed for STA
+				avg[0,pRange-1]+=AnalogueTrace[p+p1]
+				firstST=min(firstST,SpikeTimes[k])
+				lastST=max(lastST,SpikeTimes[k])
+				n1+=1
+			ENDIF
+		ENDFOR
+		avg/=n1  //divide by #spikes
+		// if there are no points in ST, return -1, delete STA wave
+		IF (n1<1)
+			KillWaves avg
+			Return -2
+		ENDIF
+
 
 // place some info in the Wave note 
 		Wavestats/R=[FirstPoint, min(DimSize(AnalogueTrace,0)-1,LastPoint)]/Q AnalogueTrace
@@ -2280,7 +2445,7 @@ END // ST_inputSectionsfromAnalogue
 //________________________________________________________________________
 
 
-FUNCTION BST_Wrapper(nRounds,DoNoiseFloor[, earliestST, latestST, FirstPoint,LastPoint])
+FUNCTION BST_Wrapper(nRounds,DoNoiseFloor[, earliestST, latestST, FirstPoint,LastPoint, SpikeTimeSuffix])
 VARIABLE		nRounds	//number of bootstrap rounds
 // This calls all the necessary procedures for confidence interval bootstrap
 // the waves AC_avg_scaled and FreqPoints have to exist before this can be run!
@@ -2295,6 +2460,9 @@ VARIABLE		FirstPoint,LastPoint
 VARIABLE		earliestST,latestST	// those are boundaries of possible spike times; needed in order to properly shift spike times, i.e. only needed for NoiseFloor 
 	// if not provided they will be approximated by the time of the first and last spike
 
+STRING		SpikeTimeSuffix // standard is "ST", but for special cases, it is usefull to define otherwise, for instance STwC ("with Criteria")
+
+
 IF (ParamIsDefault(FirstPoint))
 	FirstPoint = 0
 ENDIF
@@ -2303,6 +2471,11 @@ IF ( (ParamIsDefault(earliestST)) || (ParamIsDefault(LatestST)))
 	latestST=-1000
 	// values with earliest > latest will indicate to later stages that the values should not be used
 ENDIF
+
+IF (ParamIsDefault(SpikeTimeSuffix))
+	SpikeTimeSuffix = "ST"
+ENDIF
+
 
 //		IF (exists("AC_avg_scaled" )!=1)
 //			DoAlert 0,"AC_avg_scaled not found"
@@ -2323,13 +2496,13 @@ ENDIF
 		ENDIF 
 		
 		IF (ParamIsDefault(FirstPoint))
-			PrepareST_List()
+			PrepareST_List(SpikeTimeSuffix)
 			// creates the IndexWave "BST_SpikeIndicies"
 			// and the CountWave "BST_SpikeCount"
 			// also creates 2 WAVES of WaveREFERENCES, which hold all STWaves and all IWaves
 			// which are used, in the sequence in which they are listed in the 
 		ELSE
-			PrepareST_List(FirstPoint=FirstPoint,LastPoint=LastPoint) // awkward nomenclature, lhs are the names of the variables in the called procedure, 
+			PrepareST_List(SpikeTimeSuffix,FirstPoint=FirstPoint,LastPoint=LastPoint) // awkward nomenclature, lhs are the names of the variables in the called procedure, 
 																						 //	rhs is the local variables (the values) that are handed over
 		ENDIF											
 
@@ -2434,21 +2607,22 @@ Print "Bootstrap completed. Starting the gain calculation"
 		MatrixOP/O Boot_avg=averagecols(Conf_Int^t)^t
 		
 		// sort out the 5 and 95% and the median
-//		Conf_Int[][0]=Conf_Int[p][nRounds*lowerLimit]
-//		Conf_Int[][2]=Conf_Int[p][(nRounds-1)*upperLimit]
-//		Conf_Int[][1]=(Conf_Int[p][floor(nRounds/2)]+Conf_Int[p][ceil(nRounds/2-1)])/2
-//		Redimension/N=(-1,3) Conf_Int
+		Conf_Int[][0]=Conf_Int[p][nRounds*lowerLimit]
+		Conf_Int[][2]=Conf_Int[p][(nRounds-1)*upperLimit]
+		Conf_Int[][1]=(Conf_Int[p][floor(nRounds/2)]+Conf_Int[p][ceil(nRounds/2-1)])/2
+		Redimension/N=(-1,3) Conf_Int
 		Note/K Conf_Int, Note_String
 END
 
 
-FUNCTION PrepareST_List([FirstPoint, LastPoint])
+FUNCTION PrepareST_List(ST_Suff,[FirstPoint, LastPoint])
 // this creates two waves to hold 
 // BST_SpikeIndicies 	- of all spike time waves here are the indicies of usable spikes listed
 // BST_SpikeCount  		- of all spike time waves this holds the wave names (in DimLabel) and it holds
 //							  the number of usable spike times (the once too close to begin / end cannot be used
 
 // this has to be called ONCE before ANY Bootstrap
+STRING			ST_Suff					// suffix identifying spike times, without leading "_"
 VARIABLE		FirstPoint, LastPoint	// to deal with the data from Omer, where only some part of the current can be used 
 												// due to the limitations of pClamp
 
@@ -2493,12 +2667,12 @@ VARIABLE		FirstPoint, LastPoint	// to deal with the data from Omer, where only s
 		SetDataFolder rootFolderRf
 		FolderName=StringFromList(ii, cellFolderList,";")
 		SetDataFolder $(FolderName)
-		StList=WaveList("*_ST",";","")
+		StList=WaveList("*_"+ST_Suff,";","")
 		nSTs=ItemsInList(STList,";")
 		FOR (kk=0; kk< nSTs; kk+=1)
 			currSTName = StringFromList(kk, STList,";")
 			WAVE currST=$currSTName
-			currIName=RemoveEnding(currSTName,"ST") + "I" 
+			currIName=RemoveEnding(currSTName,ST_Suff) + "I" 
 			WAVE	currI=$currIName
 			
 			// get DimOffset right, in case FirstPoint was > 0
@@ -2937,7 +3111,6 @@ VARIABLE	widthFac		// width of the gaussian filter	; a value of 1 corresponds to
 			W_G/=FFTofAC
 			W_G*=cmplx(globalRate,0)			
 			W_G=conj(W_G)			// added 03/08/2020 to obtain correct sign of the phase
-
 	
 			//  Will  produce a Magnite and Phase wave
 			VARIABLE	df_in=DimDelta(FFTofAC,0)		// frequency step width in input
@@ -3005,7 +3178,7 @@ WAVE/D		FreqPoints	// vector with Frequency values at which filtered versions of
 VARIABLE	widthFac		// width of the gaussian filter	; a value of 1 corresponds to 
 						// Higgs and Spain's choice of f/2Pi
 		// the optional parameters FreqPoints and widthFac  are supplied as follows:
-		// GaussFilter(FT,FreqPoints=FrequencyRange, widthFac=1)
+		// GaussFilter(FT, widthFac=1)
 
 // check whether Input is actually a complex wave
 
@@ -3022,7 +3195,7 @@ VARIABLE	widthFac		// width of the gaussian filter	; a value of 1 corresponds to
 	VARIABLE	nPoints	
 		IF (ParamIsDefault(FreqPoints))
 	           	nPoints = min(floor((DimSize(FT,0) -1)/2), 50)		// max 50 Freq points, but no more than 
-										// half the number that is there already
+																	// half the number that is there already
 			// linear distance in log requires a frequency factor 
 			// to describe construction of the FreqList
 			VARIABLE	freqFac =10^( log(maxf-minf)/(nPoints-1))
@@ -3077,6 +3250,7 @@ VARIABLE	widthFac		// width of the gaussian filter	; a value of 1 corresponds to
 		ENDIF
 		KillWaves/Z GWeight, RealPart, ImagPart
 END
+
 
 FUNCTION PiecewiseFFT(InWave, winLen,sinSqrLen, overlap)
 WAVE InWave
@@ -4650,7 +4824,7 @@ STRING	targetName
 			Note_String=StringByKey("duration", Notiz,":" ,"\r")
 			duration=str2num(Note_String)
 
-			Avg+=STA/(SD^2)*duration // possibly SD^2 but sometimes just SD 
+			Avg+=STA/(SD^2)*duration // possibly SD^2
 			totalSTANumber+=1
 			AvgSD+=(SD^2)*duration		//  SD^2 if used above
 			totspikes+=nspikes
@@ -5366,7 +5540,7 @@ FUNCTION CreatePhaseWave(V_Wave[,FirstPoint,LastPoint])
 			ELSE
 				freq=NaN
 			ENDIF
-	ELSE
+		ELSE
 		// check if that one frequency component does stand out from the surrounding
 		
 		VARIABLE nextHighest=max(WaveMax(Temp_FFT,pnt2x(Temp_FFT,max(0,p_freq-6)),pnt2x(Temp_FFT,max(0,p_freq-2))), WaveMax(Temp_FFT,pnt2x(Temp_FFT,p_freq+2),pnt2x(Temp_FFT,p_freq+6)))
@@ -5378,8 +5552,8 @@ FUNCTION CreatePhaseWave(V_Wave[,FirstPoint,LastPoint])
 		VARIABLE SD=sqrt(Variance(TEmp_part))
 		// Use a combination of the two measures to exclude 
 		// results from noisy FFTs
-		IF ( (nextHighest/Temp_FFT[p_freq] > 0.5 ) || (Temp_FFT[p_freq]/SD < 3 ) ) 	// might need some adjustments in the two 
-												// hard coded limits 
+		IF ( (nextHighest/Temp_FFT[p_freq] > 0.5 ) || (Temp_FFT[p_freq]/SD < 3 ) )	// might need some adjustments in the two 
+																					// hard coded limits 
 		
 			DoAlert 0, "Ignored the sine freq in wave "+IName+".\r It was detected to be "+num2str(freq)+" Hz."
 			customFreq=500
@@ -5539,6 +5713,7 @@ VARIABLE	quiet, doComplex
 				Printf "\r%f\r%f\r%f\r",QuantileWave[0],QuantileWave[1],QuantileWave[2]
 			ENDIF
 			KillWaves/Z BootStatsC
+
 		ENDIF
 END
 
@@ -5667,13 +5842,15 @@ STRING			Logic 			// "and" or "or"
 		Abort "SourceWave " + NameOfWave(sourceWave)+" not found"
 	ELSE
 		Wavestats/M=1/Q SourceWave
-		VARIABLE SourcePnts=V_npnts
+		VARIABLE SourcePnts=V_npnts+V_numNans+V_numINFs	// it should be possible to deal with NaNs and INFs without excluding 
+																	// ALL waves that have them
+																	// therefore I include them here
 	ENDIF
 	IF (!WaveExists(CriteriumWave0))
 		Abort "CriteriumWave " + NameOfWave(CriteriumWave0)+" not found"
 	ELSE
 		Wavestats/M=1/Q CriteriumWave0
-		VARIABLE Crit0Pnts=V_npnts
+		VARIABLE Crit0Pnts=V_npnts+V_numNans+V_numINFs
 	ENDIF
 	 
 	// Quick health check about wave sizes
@@ -5686,7 +5863,7 @@ STRING			Logic 			// "and" or "or"
 			Abort "CriteriumWave " + NameOfWave(CriteriumWave1)+" not found"
 		ELSE
 			Wavestats/M=1/Q CriteriumWave1
-			VARIABLE Crit1Pnts=V_npnts
+			VARIABLE Crit1Pnts=V_npnts+V_numNans+V_numINFs
 		ENDIF
 		// Quick health check about wave sizes
 	
@@ -5748,7 +5925,15 @@ STRING			Logic 			// "and" or "or"
 	// get number of non-zero entries
 	VARIABLE	nHits=sum(Indicies0)
 	IF (nHits<=0)
-		Return target // still an empty wave
+	
+	// this version should work for most
+	Return target  // still an empty wave
+	
+	// sometiems at least one entry is required
+	// returning a NAN might be adequate
+	Target[0]={NaN}
+
+		Return Target // contains one "NaN"
 	ENDIF
 	// load index into indicies0
 	Indicies0[]*=p+1
@@ -5766,6 +5951,9 @@ STRING			Logic 			// "and" or "or"
 	Return target
 
 END // WaveSubsetByCriteria
+
+
+
 
 
 FUNCTION/WAVE CollectDataByNoteAndCriterium(Suffix[, NoteKey,low4NoteVal, up4NoteVal, CriteriumSuffix, lowCrit, upCrit, CriteriumSuffix1, lowCrit1, upCrit1	] )
