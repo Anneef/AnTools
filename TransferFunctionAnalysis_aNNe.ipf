@@ -3704,7 +3704,7 @@ VARIABLE		Trange
 	
 	Display /W=(34.8,42.2,559.2,354.8) as "Phaseplot "+VoltName
 
-	FOR (SCount=0; Scount < SNum-1; SCount+=1) // from first to last spike
+	FOR (SCount=0; Scount < SNum; SCount+=1) // from first to last spike
 
 		SpikePoint1=x2pnt(VoltWave, ST[Scount] )-PRange/3*2		
 		PP[][Scount][0]=voltWave[SpikePoint1+p]	
