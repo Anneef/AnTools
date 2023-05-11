@@ -46,7 +46,7 @@ ANTools_extended.ipf contain useful tools to speed up common steps in general da
   - `QuantilesFromSample()` returns estimates for specified quantiles for a given set of samples.
 
 ## Dynamic gain code
-This folder contains all functions required to calculate dynamic gain functions from the input and output (current and voltage), to calculate confidence intervals and noise-floor curves for the dynamic gain and to decompose the dynamic gain ([Zhang et al. 2021 (https://doi.org/10.1101/2022.02.04.479104).
+This folder contains all functions required to calculate dynamic gain functions from the input and output (current and voltage), to calculate confidence intervals and noise-floor curves for the dynamic gain and to decompose the dynamic gain ([Zhang et al. 2021](https://doi.org/10.1101/2022.02.04.479104)).
 Other code provides tools to detect and characterize action potentials (threshold, height, width, depth and time of after-hyperpolarization, peak upstroke and downstroke speed) and action potential time series (coefficient of variation- CV- and local variability -LV- of inter-spike intervals).
 
 ## DynamicTimeWarping
