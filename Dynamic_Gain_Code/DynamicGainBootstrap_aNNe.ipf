@@ -218,10 +218,11 @@ STRING			ST_Suff					// suffix identifying spike times, without leading "_"
 
 	VARIABLE		ii, nSubs=ItemsInList(cellFolderList,";")
 	STRING			currentDFPath = GetDataFolder(1)		
-					//nsubs=1 // hard wired when going through individual subfolders
 	
 	IF (nSubs==0)	// there are no subfolders, work inside the current folder
 		cellFolderList = currentDFPath+";"
+		nsubs=1 // need this to go through the ONE folder, ich which we currently are
+
 	ENDIF
 	VARIABLE		kk, nSTs
 	DFREF			rootFolderRf=GetDataFolderDFR()
