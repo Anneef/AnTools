@@ -9,7 +9,7 @@
 // # # # # # # # 	                       # # # # # # # # # # # # 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #  
 FUNCTION GainCalculationFunc()
-	STRING Prefix="A"
+	STRING Prefix="OU"
 	STRING CMDSTR
 	DFREF  topDf=GetDataFolderDFR()
 	
@@ -131,10 +131,11 @@ FUNCTION GainCalculationFunc()
 END 
 
 MACRO GainCalculationWrapper()
-// start in the folder above all cell folders
-// goes through and creates the avg gain 
+// only needed for gain of individual folder (cell)
+// requires all spike time, spike triggered average and autocorrelation files to already exist
+// i.e. requires that GainCalculationFunc() has been run in the folder above
 
-	STRING Prefix="A"
+	STRING Prefix="OU"
 	STRING CMDSTR
 	STRING PathToFolder=GetDataFolder(1)
 //	
@@ -148,38 +149,38 @@ MACRO GainCalculationWrapper()
 //	// create autocorrelation traces for each trial in each subfolder
 //	XeqtInSubs("MakeAC()")
 	
-	// Collect all ACs from all subfolders
-	STRING/G FolderACs= ""
-	CMDSTR="Xeqt4WList(\"??Pref??*_AC\" ,\"root:FolderACs+= \\\"§SUBFULL§~;\\\"\")"
-	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
-	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
-	XeqtInSubs(CMDSTR)
+//	// Collect all ACs from all subfolders
+//	STRING/G FolderACs= ""
+//	CMDSTR="Xeqt4WList(\"??Pref??*_AC\" ,\"root:FolderACs+= \\\"§SUBFULL§~;\\\"\")"
+//	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+//	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
+//	XeqtInSubs(CMDSTR)
 	
-	// create the AVG AC from across all folders. Result is in superordinate folder
-	AvgACFromList(FolderACs,"AC_avg_scaled")
+//	// create the AVG AC from across all folders. Result is in superordinate folder
+//	AvgACFromList(FolderACs,"AC_avg_scaled")
 	
-	// collect all spike triggered averages from all subfolders 
-	STRING/G FolderSTAs=""
-	CMDSTR="Xeqt4WList(\"??Pref??*_STA\",\"root:FolderSTAs+=\\\"§SUBFULL§~;\\\"\")"
-	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
-	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
-	XeqtInSubs(CMDSTR)
+//	// collect all spike triggered averages from all subfolders 
+//	STRING/G FolderSTAs=""
+//	CMDSTR="Xeqt4WList(\"??Pref??*_STA\",\"root:FolderSTAs+=\\\"§SUBFULL§~;\\\"\")"
+//	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
+//	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
+//	XeqtInSubs(CMDSTR)
 	
-	// create the AVG STA from across all folders. Result is in superordinate folder
-	AvgSTAFromList(FolderSTAs,"STA_avg_scaled")
+//	// create the AVG STA from across all folders. Result is in superordinate folder
+//	AvgSTAFromList(FolderSTAs,"STA_avg_scaled")
 	
-	// calculate overall gain for data from all subfolders
-	SplitBeforeFFT(AC_avg_scaled,0)
-	WAVESTATS/Q STA_avg_scaled
-	SplitBeforeFFT(STA_avg_scaled,V_maxloc)
-	FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt
-	FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt
-	Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled;
-	Gain_avg_scaled/=AC_avg_scaled_splt_FFT
-	Gain_avg_scaled*=cmplx(str2num(StringByKey("total#spikes", note(STA_avg_scaled),":" ,"\r"))/str2num(StringByKey("totalduration", note(STA_avg_scaled),":" ,"\r")),0)
-	Gain_avg_scaled= conj(Gain_avg_scaled)	// fixes the sign of the phase
-	GaussFilter(Gain_avg_scaled)
-	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)
+//	// calculate overall gain for data from all subfolders
+//	SplitBeforeFFT(AC_avg_scaled,0)
+//	WAVESTATS/Q STA_avg_scaled
+//	SplitBeforeFFT(STA_avg_scaled,V_maxloc)
+//	FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt
+//	FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt
+//	Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled;
+//	Gain_avg_scaled/=AC_avg_scaled_splt_FFT
+//	Gain_avg_scaled*=cmplx(str2num(StringByKey("total#spikes", note(STA_avg_scaled),":" ,"\r"))/str2num(StringByKey("totalduration", note(STA_avg_scaled),":" ,"\r")),0)
+//	Gain_avg_scaled= conj(Gain_avg_scaled)	// fixes the sign of the phase
+//	GaussFilter(Gain_avg_scaled)
+//	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)
 	
 	// now create avg AC and STA and gain in each subfolder
 	
