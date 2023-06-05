@@ -704,9 +704,9 @@ VARIABLE		lowCrit, upCrit,lowCrit1, upCrit1
 	STRING		Wave_List
 	STRING		FolderName, cellFolderList=StringByKey("FOLDERS", DataFolderDir(1),":", ";")+","
 	cellFolderList = ReplaceString(",", cellFolderList, ";")
-	cellFolderList = ReplaceString("IGNORE;", cellFolderList, "")
-	cellFolderList = ReplaceString("Packages;", cellFolderList, "")
-	
+	cellFolderList = RemoveFromList("Packages;IGNORE;", cellFolderList, ";")
+	cellFolderList = SortList(cellFolderList,";",16)
+
 	VARIABLE	i, nSubs=ItemsInList(cellFolderList,";")
 	// for the case of finding NO subfolders, operate in the folder, from where the function was called, 
 	IF (nsubs<1)
@@ -884,8 +884,19 @@ VARIABLE		low4NoteVal, up4NoteVal
 	STRING		Wave_List
 	STRING		FolderName, cellFolderList=StringByKey("FOLDERS", DataFolderDir(1),":", ";")+","
 	cellFolderList = ReplaceString(",", cellFolderList, ";")
-	
+	cellFolderList = RemoveFromList("Packages;IGNORE;", cellFolderList, ";") // do not search in these folders
+	cellFolderList = SortList(cellFolderList,";",16)
+
 	VARIABLE	i, nSubs=ItemsInList(cellFolderList,";")
+
+// for the case of finding NO subfolders, i.e. if nsubs=0
+// do operate in the folder, from where the function was called
+// for this set nsubs=1. Together with the empty cellFolderList, it causes one round
+// through the current folder
+	IF (nsubs<1)
+		cellfolderlist=GetDataFolder(1)	+";"
+		nsubs=1
+	ENDIF
 	DFREF		rootFolderRf=GetDataFolderDFR()
 	STRING		rootDFPath
 	rootDFPath = GetDataFolder(1)		// OK
