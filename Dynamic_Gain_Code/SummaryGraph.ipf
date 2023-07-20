@@ -43,23 +43,42 @@ MACRO CreateAvgSpikeByVoltThreshold()
 END
 
 
-MACRO SummaryGraph(FolderName)
+FUNCTION SummaryGraph(FolderName, GraphNamePrefix,[Vmin,Vmax, dVmin,dVmax,GainMaxMag])
 // to be called from inside the folder, but also providing the folders name
 // this can be achieved using the keyword §SUB§ inside the XeqtInSubs command:
-// XEQTinSubs("SummaryGraph(\"§SUB§\")")
+// XEQTinSubs("SummaryGraph(\"§SUB§\",\"NAMEPREFIX\",Vmin=-60e-3,Vmax=60e-3,dVmin=-100,dVmax=600,GainMaxMag=4.1e+11)")
 
 // the summary layout can be created with the following lines (assuming the Title of summaries assigned below (GraphName)
 // is  "SumTitle")
-//Layout/T as "SummaryGraphs XYZ"
-//XEQTinSubs("AppendToLayout/T SumTitle§SUB§; LayoutPageAction appendPage")
+//Layout/T as "SummaryGraphs NAMEPREFIX"
+//XEQTinSubs("AppendToLayout/T NAMEPREFIX_§SUB§; LayoutPageAction appendPage")
 
 // it does require the average spike waveforms, to exist and to end in "avgSpikeOn"
+STRING		GraphNamePrefix
+STRING 	FolderName
+VARIABLE 	vmin,Vmax, dVmin,dVmax,GainMaxMag
 
 VARIABLE	ShowGains=1
 
-STRING FolderName
+IF (ParamIsDefault(Vmin))
+	Vmin=-65e-3 // -65mV
+ENDIF
+IF (ParamIsDefault(Vmax))
+	Vmax=-40e-3 // 40mV
+ENDIF
+IF (ParamIsDefault(dVmin))
+	dVmin=-300 // 300V/s
+ENDIF
+IF (ParamIsDefault(dVmax))
+	dVmax=600 // 600V/s
+ENDIF
+IF (ParamIsDefault(GainMaxMag))
+	GainMaxMag=2.5e+11 // 250 Hz/nA
+ENDIF
 	
-	STRING GraphName="AD_excluded_"+FolderName
+	
+	
+	STRING GraphName=GraphNamePrefix+"_"+FolderName
 	
 	Display/W=(200,50,450,300) as GraphName; DoWindow/C $(GraphName);
 	STRING rememberFolder=GetDataFolder(1)
@@ -76,9 +95,17 @@ STRING FolderName
 	// now plot avg spike waveforms
 	Xeqt4WList("*_avgSpikeOn" ," AppendToGraph/L=VertCrossing/B=HorizCrossing  ~_DIF vs ~;AppendToGraph/L=SpikeLeft/B=SpikeBottom ~[2e-3/DimDelta(~,0),DimSize(~,0)-1] ; MOdifyGraph rgb[ItemsInList(TraceNameList(\"\", \";\", 1 ) ,\";\")-1]=(0,0,0);MOdifyGraph rgb[ItemsInList(TraceNameList(\"\", \";\", 1 ) ,\";\")-2]=(0,0,0)") 
 	IF (ShowGains)
-		AppendToGraph/L=GainLeft/B=GainBottom Gain_avg_scaled_MgFlt vs FreqPoints
+		WAVE Magnitude=Gain_avg_scaled_MgFlt
+		WAVE FreqPoints=FreqPoints
+		IF (!WaveExists(Magnitude))
+			DoAlert 0,"Missing gain wave "+GetWavesDataFolder(Magnitude,2)
+		ENDIF 
+		IF (!WaveExists(FreqPoints))
+			DoAlert 0,"Missing FreqPoints wave "+GetWavesDataFolder(FreqPoints,2)
+		ENDIF 
+		AppendToGraph/L=GainLeft/B=GainBottom Magnitude vs FreqPoints
 		SetAxis GainBottom *,1000
-		SetAxis GainLeft 0,2.5e+11
+		SetAxis GainLeft 0,GainMaxMag
 	  	DO
 	  		ModifyGraph rgb[tt]=(grey,grey,grey,(2^16-1))
 	  		tt+=1
@@ -97,9 +124,9 @@ STRING FolderName
 		ModifyGraph rgb=(0,0,0,0.6*(2^16-1))
 
 	ENDIF
-	SetAxis HorizCrossing -0.065,0.065
-	SetAxis VertCrossing -600,850;
-	SetAxis SpikeLeft -0.065,0.045
+	SetAxis HorizCrossing Vmin,Vmax
+	SetAxis VertCrossing dVmin,dVmax;
+	SetAxis SpikeLeft Vmin,Vmax
 	// color all except the first nGreyTraces in another color (black)
 	VARIABLE nTraces=ItemsInList(TraceNameList("", ";",1 ),";")
 	tt=nGreyTraces
