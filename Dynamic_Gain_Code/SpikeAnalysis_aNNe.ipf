@@ -241,7 +241,7 @@ VARIABLE	RateThresh				// threshold value for dV/dt to define onset
 		WAVESTATS/Q dummy
 		VARIABLE	expectedVjitter=1500*dt/2*2 // dV/dt max * dt/2  * safety factor of 1.5
 		IF ( (V_max-V_min) > expectedVjitter)
-			Print 0,"The range of threshold voltages related to the spike times\ris "+num2str((V_max-V_min)*1000)+" mV.\rThat seems too big, aborting..."
+			Print 0,"In wave "+ GetWavesDataFolder(InWave_V,2) +"The range of threshold voltages related to the spike times\ris "+num2str((V_max-V_min)*1000)+" mV.\rThat seems too big, aborting..."
 			KillWaves dummy
 			Return -1
 		
