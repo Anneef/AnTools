@@ -599,10 +599,11 @@ VARIABLE	STA_Dur								// Duration of the STA used for the Gain calculation
 VARIABLE	V_thresh							// voltages above this are replaced by threshold (in V)
 VARIABLE	deadtime							// if given, the measurement values are replaced with a 
 												// straight line, from the point of crossing threshold, 
-												// to the point "deadtime" seconds later														
+												// to the point "deadtime" seconds later
+																										
 // takes current and voltage traces, removes voltage values above the spike threshold (average of the 
 // specific voltage trace as specified by the spike property assessment )
-// traces are cut into segments of the same length as the spike triggered average (here: 1s)
+// current and voltage traces (after truncation) are cut into segments of the same length as the spike triggered average (here: 1s)
 // standard Fourier transform approach to determine the transfer function between current and voltage
 // in the present version the phase is inverted (missing conjugated complex)
 														
@@ -636,7 +637,7 @@ VARIABLE	deadtime							// if given, the measurement values are replaced with a
 		// creates the wanted wave (see last comment), the name is the name of Inwave_ST, with additional suffix "_4subG"
 		WAVE StartPoints=$(NameOfWave(Inwave_ST)+"_4Susz")
 		// problems arise, if this wave contains NAN
-		// this would happen, if the threshold was not crossed only before the previous spike occured
+		// this would happen, if the threshold was not crossed, i.e. only before a previous spike occured
 		// if that happends, we have to start cutting out spikes from dummy_i and dummy_V
 		
 		VARIABLE p1,p2,y1,y2, slope
@@ -679,12 +680,13 @@ VARIABLE	deadtime							// if given, the measurement values are replaced with a
 	MAKE/O/N=(round(2000*STA_Dur),DimSize(Dummy_I_FFT,1)) Dummy 	// only need to reduce the noise for frequencies below 2kHz, 
 																				// those are in the first 2000*Sta_dur rows
 	VARIABLE reps=0
+	Dummy=cabs(Dummy_I_FFT)	// put the values of the (updated) I_FFT matrix into dummy (for all freqs up to 2000 Hz)
 	DO
-		Dummy[][]=cabs(Dummy_I_FFT[p][q])	// put the values of the (updated) I_FFT matrix into dummy (for all freqs up to 2000 Hz)
 		wavestats/Q/M=1 Dummy
 		Dummy_I_FFT[V_minRowLoc][V_minColLoc]+=cmplx(1e-9,1e-9)		// replace the entry with the smallest magnitude by 
-																				// a magnitude of 1e-9. The phase does not matter much, 
-																				// because the magnitude is so small
+																	// a magnitude of 1e-9. The phase does not matter much, 
+																	// because the magnitude is so small
+		Dummy[V_minRowLoc][V_minColLoc]+=1e-9	
 		reps+=1
 	WHILE ( (reps < 2000) && (V_min<1e-9))
 
@@ -1037,4 +1039,3 @@ STRING STA_Suffix // across all subfolders, STA waves with this suffix are colle
 	note $GainName,"Zero delay Gain\r"+STA_Suffix+"\r"+note(STA_avg_scaled)
 	
 END
-
