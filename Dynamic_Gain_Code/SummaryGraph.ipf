@@ -78,8 +78,8 @@ ENDIF
 	
 	
 	
-	STRING GraphName=GraphNamePrefix+"_"+FolderName
 	
+	STRING GraphName=GraphNamePrefix+"_"+FolderName
 	Display/W=(200,50,450,300) as GraphName; DoWindow/C $(GraphName);
 	STRING rememberFolder=GetDataFolder(1)
 	// go through all datafolders of the same level and plot the gains from those folders
@@ -192,5 +192,6 @@ ENDIF
 
 	SetWindow kwTopWin,userdata(ACL_desktopNum)=  "2"
 	ModifyGraph width=396,height=432
+	TextBox/C/N=AnnoText/A=MB/X=23.67/Y=3.47
 
 END
