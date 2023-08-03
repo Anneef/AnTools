@@ -9,11 +9,22 @@
 // # # # # # # # 	                       # # # # # # # # # # # # 
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #  
 FUNCTION GainCalculationFunc()
+	// Calculates the Dynamic gain for all voltage and current traces 
+	// in all folders under the current folder
+	// ONLY IF there are no subfolders (other than "Packages" and "IGNORE")
+	// it calculates the Gain inside the current folder
+	
+	// uses Multithreading for detecion of Spikes and spike shape analysis
+	// also for calculation of spike triggered average current and autocorrelation
+	
 	STRING Prefix="OU"
+	// important! only considers waves with a name starting with the Prefix, and ending in "_V" or "_I"
 	STRING CMDSTR
 	DFREF  topDf=GetDataFolderDFR()
 	
 	STRING	rootStr=GetDataFolder(1,topDF)
+	// the datafolder reference and the string are two different wazs to refer back to the 
+	// current folder. each is needed for certain commands
 	
 	STRING		FolderListe=ReplaceString(",", StringByKey("FOLDERS", DataFolderDir(1,topDf)+",",  ":", ";") ,";") 
 	FolderListe= RemoveFromList("Packages;IGNORE;", FolderListe, ";")
@@ -21,11 +32,19 @@ FUNCTION GainCalculationFunc()
 	
 	VARIABLE	ww,runde,numFolders=ItemsInList(FolderListe)
 	
+	// handle special case of no subfolders -> work with data inside current folder
+	IF (numFolders==0)				// there are no subfolders, work inside the current folder
+		FolderListe = rootStr+";" 	// we place the current folders path inside the list
+		numFolders=1 				// this needs to be set, in order to go through this ONE folder, in which we currently are
+	ENDIF
+
+	
+
+	
 	STRING 	ListOfVWaves,ListOfIWaves,ListOfSTWaves="",NewName
 	VARIABLE	NumEntries=0
 	
-	MAKE/O/WAVE/N=(0) AllVWRs
-	// Spike times in subfolders
+	MAKE/O/WAVE/N=(0) AllVWRs // "all voltage wave references"
 	FOR (runde=0; runde< numFolders; runde+=1)
 		SetDataFolder $(StringFromList(runde,FolderListe,";"))
 		ListOfVWaves=WaveList(Prefix+"*_V",";","")
@@ -38,7 +57,8 @@ FUNCTION GainCalculationFunc()
 
 	STRING WAVESInDF
 	VARIABLE nwaves
-
+	// Spike times in subfolders 
+	// create spike time waves for all voltage waves
 	Multithread AllSTs[]=ReturnSpikeTimeWave(AllVWRs[p],V_Threshold=0, MinISI=0.002)
 	// using multithreading with folders to be returned
 	// now write STs into existing datafolders (otherwise they are immediately deleted
@@ -131,9 +151,8 @@ FUNCTION GainCalculationFunc()
 END 
 
 MACRO GainCalculationWrapper()
-// only needed for gain of individual folder (cell)
-// requires all spike time, spike triggered average and autocorrelation files to already exist
-// i.e. requires that GainCalculationFunc() has been run in the folder above
+// start in the folder above all cell folders
+// goes through and creates the avg gain 
 
 	STRING Prefix="OU"
 	STRING CMDSTR
@@ -155,20 +174,20 @@ MACRO GainCalculationWrapper()
 //	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
 //	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
 //	XeqtInSubs(CMDSTR)
-	
+//	
 //	// create the AVG AC from across all folders. Result is in superordinate folder
 //	AvgACFromList(FolderACs,"AC_avg_scaled")
-	
+//	
 //	// collect all spike triggered averages from all subfolders 
 //	STRING/G FolderSTAs=""
 //	CMDSTR="Xeqt4WList(\"??Pref??*_STA\",\"root:FolderSTAs+=\\\"§SUBFULL§~;\\\"\")"
 //	CMDSTR=ReplaceString("??Pref??",CMDSTR,Prefix)
 //	CMDSTR=ReplaceString("root:",CMDSTR,GetDataFolder(1))
 //	XeqtInSubs(CMDSTR)
-	
+//	
 //	// create the AVG STA from across all folders. Result is in superordinate folder
 //	AvgSTAFromList(FolderSTAs,"STA_avg_scaled")
-	
+//	
 //	// calculate overall gain for data from all subfolders
 //	SplitBeforeFFT(AC_avg_scaled,0)
 //	WAVESTATS/Q STA_avg_scaled
@@ -181,7 +200,7 @@ MACRO GainCalculationWrapper()
 //	Gain_avg_scaled= conj(Gain_avg_scaled)	// fixes the sign of the phase
 //	GaussFilter(Gain_avg_scaled)
 //	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)
-	
+//	
 	// now create avg AC and STA and gain in each subfolder
 	
 	CMDSTR="STRING/G FolderACs=\"\"; Xeqt4WList(\"??Pref??*_AC\",\"FolderACs+=\\\"~;\\\"\") ; AvgACFromList(FolderACs,\"AC_avg_scaled\")"
@@ -855,6 +874,7 @@ ThreadSafe FUNCTION/WAVE GetACWORKER(WAVE cur,WAVE STA,STRING ACName)
 			SetScale/P x,DimOffset(Cur,0),DimDelta(Cur,0),"", AC, W_CurDummy
 
 			Correlate/NODC W_CurDummy, AC
+			KillWaves/Z W_CurDummy
 			// normalize for number of points in the original current wave
 			AC/=npnts
 			// AC is a very long wave,  retain only the same region that is present in the STA (i.e. STAwidth)
@@ -1322,4 +1342,3 @@ WAVE	PhaseWave	// contains all the phases (rad) that a series of events has with
 
 	Return VS
 END // VSfromPhases
-
