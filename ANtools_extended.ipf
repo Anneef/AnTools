@@ -12,6 +12,8 @@
 // 12/4/21  aNNe	  -  In the Xeqt4List and Xeqt4WList it is now possible to programmatically modify the strings from the list before they are introduced to the command line at
 //						instances of '~'. to this end, use §~rmvendX§ , where 'X' is the letter or number or underscore, with which the ENDING starts that is being removed. 
 //						importantly, it is the last occurrence of this letter (number etc.) in the string that is considered
+// 2023  aNNe	  -  in restructuring other code, data stratification procedures were moved here,
+//						traceScanner for semi-transpararent display was added
 
 Menu "Macros"
 		Submenu "Repetitive Tasks"
@@ -432,6 +434,49 @@ STRING		FindString,ReplacementStr,Prefix,Suffix
 	ENDFOR
 END
 
+
+FUNCTION/WAVE DeleteEmptyFolders()
+	SetDataFolder root:
+	DfREF StartDF=GetDataFolderDFR()
+	
+	
+	// a wave to hold references to all folders
+	MAKE/O/N=0/DF AllRefs
+	AddFolders(AllRefs, GetDataFolderDFR())
+	// now this contains references to all folders
+	
+	SetDataFolder StartDF
+	
+	VARIABLE	ww,nw,ff, nf=DimSize(AllRefs,0)
+	// now visit all the folders and get the waves
+	// and print results
+	MAKE/O/WAVE/N=0 AllWaves
+	
+	
+	FOR (ff=0; ff< nf; ff++)
+		DFREF cf=AllRefs[ff]
+		DFREF returnTo=GetDataFolderDFR()
+		//SetDataFolder cf
+		//print GetDataFolder(1)
+		//SetDataFolder returnTo
+		 
+		nw=CountObjectsDFR(cf, 1)
+		// number of waves in current DataFolder
+		IF(nw<1) // no waves in DataFolder
+			nw=CountObjectsDFR(cf, 4)
+			// number of DataFolders in current DataFolder
+			IF(nw<1) // no DataFolders in DataFolder
+				KillDataFolder cf
+
+				//KillDataFolder GetDataFolder(mode , returnTo )
+			ENDIF
+		ENDIF
+	
+	ENDFOR
+		
+			
+END
+
 FUNCTION/WAVE CrawlTree()
 // returns a wave containing refrences to all the waves in all folders under currently active folder
 
@@ -706,7 +751,7 @@ VARIABLE		lowCrit, upCrit,lowCrit1, upCrit1
 	cellFolderList = ReplaceString(",", cellFolderList, ";")
 	cellFolderList = RemoveFromList("Packages;IGNORE;", cellFolderList, ";")
 	cellFolderList = SortList(cellFolderList,";",16)
-
+	
 	VARIABLE	i, nSubs=ItemsInList(cellFolderList,";")
 	// for the case of finding NO subfolders, operate in the folder, from where the function was called, 
 	IF (nsubs<1)
@@ -912,6 +957,8 @@ VARIABLE		low4NoteVal, up4NoteVal
 		
 	
 	// go through all subfolders
+	// or, if there are no subfolders that are not called "IGNORE" or "Packages"
+	// then go only through the current folder
 	
 
 
