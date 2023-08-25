@@ -46,7 +46,7 @@ ANTools_extended.ipf contains useful tools to speed up common steps in general d
   Pick data, either entire waves, or a subset of their entries, or both, based on criteria. This could be numerical entries in the waves notes, or criteria contained in separate waves. Specifically:
   - `WaveSubsetByCriteria(sourceWave, CriteriumWave0, lowCrit0, upCrit0[, CriteriumWave1, lowCrit1, upCrit1, Logic] )` Returns the subset of points in sourceWave for which the corresponding entries in the criteria waves comply with the criteria boundaries
   - `ListDataByNote(Suffix, NoteKey,low4NoteVal, up4NoteVal)` returns waves that have the suffix "Suffix" after a dash, and also have, in their wavenotes the Keyord "NoteKey", followed by ":value" where value lies between low4NoteVal and up4NoteVal
-  - `CollectDataByNoteAndCriterium(Suffix[, NoteKey,low4NoteVal, up4NoteVal, CriteriumSuffix, lowCrit, upCrit, CriteriumSuffix1, lowCrit1, upCrit1	] )`combines the above stratification tools in one
+  - `CollectDataByNoteAndCriterium(Suffix[, NoteKey,low4NoteVal, up4NoteVal, CriteriumSuffix, lowCrit, upCrit, CriteriumSuffix1, lowCrit1, upCrit1	] )`combines the above stratification tools in one, with the criterium wave(s) being identified by their Suffix, while the rest of those waves' names is identical to the names of the waves being stratified (originally identified by the suffix). 
   - `QuantilesFromSample()` returns estimates for specified quantiles for a given set of samples.
 
 ## Dynamic gain code
