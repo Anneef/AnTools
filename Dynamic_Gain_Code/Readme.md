@@ -1,0 +1,1 @@
+The Dynamic Gain Code requires the ANtools_extended.ipf but no other external functions. This said, loading data from Clampex or PatchMaster original files requires additional files. You can find those at bpc_ReadAxg 
