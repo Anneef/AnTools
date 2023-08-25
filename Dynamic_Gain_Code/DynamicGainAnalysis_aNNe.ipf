@@ -3,6 +3,13 @@
 #pragma DefaultTab={3,20,4}		// Set default tab width in Igor Pro 9 and later
 #include "ANtools_extended"
 #include "SpikeAnalysis_aNNe"
+
+// August 2023  -aNNe- major change in how the phase shift in dynamic gain is represented
+//                     We still split STA at peak to shift the argmax point to be the first point in the FFT,
+//                     so nothing changed to the magnitude of the gain
+//                     But unlike before, we now account for this shift, when we calculate the PHASE after the Gaussfilter at the end of GainCalculationFunc()
+
+
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #  
 // # # # # # # # 	                       # # # # # # # # # # # # 
 // # # # # # # # 	Dynamic gain WRAPPERS   # # # # # # # # # # # # 
@@ -34,14 +41,15 @@ FUNCTION GainCalculationFunc()
 	
 	// handle special case of no subfolders -> work with data inside current folder
 	IF (numFolders==0)				// there are no subfolders, work inside the current folder
-		FolderListe = rootStr+";" 	// we place the current folders path inside the list
+		FolderListe = rootStr+";" 	// we place the current folder's path inside the list
 		numFolders=1 				// this needs to be set, in order to go through this ONE folder, in which we currently are
 	ENDIF
 
-	
+	// Clean up waves possibly left over after this function was cancelled previously
+	KillWaves/Z AllVWRs ,AllIWRs, AllSTWRs, AllSTAs,AllSTs, AllSTAWRs, AllACWRs
 
 	
-	STRING 	ListOfVWaves,ListOfIWaves,ListOfSTWaves="",NewName
+	STRING 	ListOfVWaves, ListOfIWaves, ListOfSTWaves="", NewName
 	VARIABLE	NumEntries=0
 	
 	MAKE/O/WAVE/N=(0) AllVWRs // "all voltage wave references"
@@ -143,10 +151,14 @@ FUNCTION GainCalculationFunc()
 	Gain_avg_scaled*=cmplx(str2num(StringByKey("total#spikes", note(STA_avg_scaled),":" ,"\r"))/str2num(StringByKey("totalduration", note(STA_avg_scaled),":" ,"\r")),0)
 	Gain_avg_scaled= conj(Gain_avg_scaled)	// fixes the sign of the phase
 	GaussFilter(Gain_avg_scaled)
+	WAVE	FreqPoints
 	WAVE Gain_avg_scaled_MgFlt
 	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)
+	WAVE Gain_avg_scaled_PhFlt
+	Gain_avg_scaled_PhFlt[]+=2*Pi*-1*V_Maxloc*FreqPoints[p]	
+	note Gain_avg_scaled_MgFlt,"reintroduced phase shift due to STA peak latency"
 	
-	KillWaves AllVWRs,AllIWRs,AllSTWRs,AllSTAs,AllSTs, AllSTAWRs,AllACWRs
+	KillWaves AllVWRs, AllIWRs, AllSTWRs, AllSTAs, AllSTs, AllSTAWRs, AllACWRs
 
 END 
 
@@ -200,7 +212,9 @@ MACRO GainCalculationWrapper()
 //	Gain_avg_scaled= conj(Gain_avg_scaled)	// fixes the sign of the phase
 //	GaussFilter(Gain_avg_scaled)
 //	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)
-//	
+//	Gain_avg_scaled_PhFlt[]+=2*Pi*-1*V_Maxloc*FreqPoints[p]	
+//	note Gain_avg_scaled_MgFlt,"reintroduced phase shift due to STA peak latency"
+
 	// now create avg AC and STA and gain in each subfolder
 	
 	CMDSTR="STRING/G FolderACs=\"\"; Xeqt4WList(\"??Pref??*_AC\",\"FolderACs+=\\\"~;\\\"\") ; AvgACFromList(FolderACs,\"AC_avg_scaled\")"
@@ -213,13 +227,13 @@ MACRO GainCalculationWrapper()
 	XeqtInSubs("SplitBeforeFFT(AC_avg_scaled,0);WAVESTATS/Q STA_avg_scaled;SplitBeforeFFT(STA_avg_scaled,V_maxloc);")
 	XeqtInSubs("FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt;FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt;Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled;")
 	XeqtInSubs("Gain_avg_scaled/=AC_avg_scaled_splt_FFT; Gain_avg_scaled= conj(Gain_avg_scaled);Gain_avg_scaled*=cmplx(str2num(StringByKey(\"total#spikes\", note(STA_avg_scaled),\":\" ,\"\\r\"))/str2num(StringByKey(\"totalduration\", note(STA_avg_scaled),\":\" ,\"\\r\")),0) ")
-	XeqtInSubs("GaussFilter(Gain_avg_scaled);	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled)")
+	XeqtInSubs("GaussFilter(Gain_avg_scaled);	note Gain_avg_scaled_MgFlt,note(STA_avg_scaled); Gain_avg_scaled_PhFlt[]+=2*Pi*-1*V_Maxloc*FreqPoints[p]; note Gain_avg_scaled_MgFlt,\"reintroduced phase shift due to STA peak latency\" ")
 END //GainCalculationWrapper()
 	
 MACRO GainCalculationForSpikeSubset(Crit0_suff,Crit1_suff,Crit0_min, Crit0_max, Crit1_min, Crit1_max)
 STRING 		Crit0_suff,Crit1_suff
 VARIABLE		Crit0_min, Crit0_max, Crit1_min, Crit1_max
-// selects spikes that fullfill a certain criterium
+// selects spikes that fulfill a certain criterium
 // i.e. a certain theta phase (and amplitude)
 // start in the folder above all cell folders
 // goes through and creates the avg gain 
@@ -328,7 +342,9 @@ XeqtInSubs(CMDSTR)
 	Note/K Gain_avg_scaled_wC_MgFlt
 	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled_wC) + NoteAppendix
 	note/K STA_avg_scaled_wC,note(Gain_avg_scaled_wC_MgFlt)
-	
+	Gain_avg_scaled_wC_PhFlt[]+=2*Pi*-1*V_Maxloc*FreqPoints[p]	
+	note Gain_avg_scaled_wC_MgFlt,"reintroduced phase shift due to STA peak latency"
+
 	// now create avg AC and STA and gain in each subfolder
 	
 	CMDSTR="STRING/G FolderACs=\"\"; Xeqt4WList(\"??Pref??*_AC\",\"FolderACs+=\\\"~;\\\"\") ; AvgACFromList(FolderACs,\"AC_avg_scaled\")"
@@ -341,7 +357,7 @@ XeqtInSubs(CMDSTR)
 	XeqtInSubs("SplitBeforeFFT(AC_avg_scaled,0);WAVESTATS/Q STA_avg_scaled;SplitBeforeFFT(STA_avg_scaled,V_maxloc);")
 	XeqtInSubs("FFT/OUT=1/DEST=AC_avg_scaled_splt_FFT AC_avg_scaled_splt;FFT/OUT=1/DEST=STA_avg_scaled_splt_FFT STA_avg_scaled_splt;Duplicate /O STA_avg_scaled_splt_FFT, Gain_avg_scaled_wC;")
 	XeqtInSubs("Gain_avg_scaled_wC/=AC_avg_scaled_splt_FFT; Gain_avg_scaled_wC*=cmplx(str2num(StringByKey(\"total#spikes\", note(STA_avg_scaled),\":\" ,\"\\r\"))/str2num(StringByKey(\"totalduration\", note(STA_avg_scaled),\":\" ,\"\\r\")),0) ")
-	XeqtInSubs("GaussFilter(Gain_avg_scaled_wC);	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled)")
+	XeqtInSubs("GaussFilter(Gain_avg_scaled_wC);	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled); Gain_avg_scaled_wC_PhFlt[]+=2*Pi*-1*V_Maxloc*FreqPoints[p]; note Gain_avg_scaled_wC_MgFlt,\"reintroduced phase shift due to STA peak latency\" ")
 END 
 
 MACRO GainCalculationForTrialSubset(Crit0_string,Crit0_min, Crit0_max)
@@ -425,6 +441,9 @@ VARIABLE		Crit0_min, Crit0_max
 
 	Note/K Gain_avg_scaled_wC_MgFlt
 	note Gain_avg_scaled_wC_MgFlt,note(STA_avg_scaled_wC) + NoteAppendix
+	Gain_avg_scaled_wC_PhFlt[]+=2*Pi*-1*V_Maxloc*FreqPoints[p]	
+	note Gain_avg_scaled_wC_MgFlt,"reintroduced phase shift due to STA peak latency"
+	
 	note/K STA_avg_scaled_wC,note(Gain_avg_scaled_wC_MgFlt)
 	IF (keepSpikeTimesForBootstrap)
 		// need to make a copy of each eligible spike time wave, give it suffix "STwC"
