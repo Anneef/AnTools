@@ -3,12 +3,12 @@
 <body>
   
 # Overview
-This Igor Pro code was developed over to automate general wave- and string-based tasks. Most has been developed by Andreas Neef (but see Dynamic Time Warping below). The collection inside *Dynamic Gain code* contains tools for cellular electrophysiology, specifically spike detection and analysis, and the analysis of spikes fired in response to conventional, square pulse stimulation. 
+This Igor Pro code falls into three categories. AnTools_extended.ipf was developed to automate general wave- and string-based tasks. It was developed by Andreas Neef. Dynamic Time Warping is the translation of Matlab code from David Schultz (see below). The collection inside *Dynamic Gain code* contains some general tools to analyze cellular electrophysiology, specifically spike detection and analysis, and the analysis of spikes fired in response to conventional, square pulse stimulation (frequency-current curves etc.). 
   
 More importantly, the Dynamic Gain code comprises all code to compute the dynamic gain function of neurons that fire in response to continuously fluctuating, <i>in vivo</i>-like stimuli. This analysis reveals how populations encode information under realistic stimuli, aspects of which cannot be obtained with conventional stimuli ( [Lazarov et al. 2018 Sci.Advances](https://doi.org/10.1126/sciadv.aau8621), [Revah et al. 2019 J Neurosci.](https://doi.org/10.1523/JNEUROSCI.3147-18.2019) and [Merino et al. 2021 PNAS](https://doi.org/10.1073/pnas.2114549118)).
 
 ## AnTools
-ANTools_extended.ipf contain useful tools to speed up common steps in general data analysis and data display.
+ANTools_extended.ipf contains useful tools to speed up common steps in general data analysis and data display.
 
 ### *i) Wrapper functions for repeated application of a list of commands for each item.*
   
@@ -30,16 +30,16 @@ ANTools_extended.ipf contain useful tools to speed up common steps in general da
      `XeqtInSubs("Cmd1, Cmd2")`
   
   ### *iii) Functions that add functionality to a graph or automate styling.* 
-  - add buttons to scan through all traces, toggeling visibility or opacity of traces or pairs of traces. `TraceScanner()`
+  - add buttons to scan through all traces, toggling visibility or opacity of traces or pairs of traces. `TraceScanner()`
   - functions to apply custom color schemes with  custom periodicity `ColorByGeo(cyclelength=foo)` `SoftColors()` `GlobalOpacity()`
-  - function to display each column of a matrix as a seperate trace `PlotTraces()`
+  - function to display each column of a matrix as a separate trace `PlotTraces()`
   - function to normalize traces by various criteria `NormTraces()`
   - function to automatically distribute multiple vertical axes `DistributeAxes([spacinginpercent])`
   - function to auto-tag traces in a graph `TagTraceWithWaveName()`
   - function to individually color traces according to the values of another wave `ColorTraceByWave([CB])`
   
   ### *iv) Data stratification tools*
-  Pick data, either entire waves or a subset of their entries, or both, based on criteria. This could be numerical entries in the waves notes, or criteria contained in separate waves. Specifically:
+  Pick data, either entire waves, or a subset of their entries, or both, based on criteria. This could be numerical entries in the waves notes, or criteria contained in separate waves. Specifically:
   - `WaveSubsetByCriteria(sourceWave, CriteriumWave0, lowCrit0, upCrit0[, CriteriumWave1, lowCrit1, upCrit1, Logic] )` Returns the subset of points in sourceWave for which the corresponding entries in the criteria waves comply with the criteria boundaries
   - `ListDataByNote(Suffix, NoteKey,low4NoteVal, up4NoteVal)` returns waves that have the suffix "Suffix" after a dash, and also have, in their wavenotes the Keyord "NoteKey", followed by ":value" where value lies between low4NoteVal and up4NoteVal
   - `CollectDataByNoteAndCriterium(Suffix[, NoteKey,low4NoteVal, up4NoteVal, CriteriumSuffix, lowCrit, upCrit, CriteriumSuffix1, lowCrit1, upCrit1	] )`combines the above stratification tools in one
