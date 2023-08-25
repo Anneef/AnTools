@@ -3,6 +3,13 @@
 #pragma DefaultTab={3,20,4}		// Set default tab width in Igor Pro 9 and later
 #include "DynamicGainAnalysis_aNNe"
 
+// August 2023 -aNNe-  Changed how magnitude confidence interval is calculated
+//                     bootstrapped complex gain values are projected onto the average gain's unit vector
+//                     before they are evaluated (with respect to magnitude). This makes it possible to have a lower CI boundary that is NEGATIVE.
+//                     This offers another way to identify for which frequencies the gain is not significantly different from zero. 
+//                     Importantly: for frequencies away from the insignificance boundary (where gain crosses noise floor), the confidence interval is changed very little.
+//                     Also: applied the change in how the STA peak delay is represented as a phase shift (after Gaussfilter).
+
 // # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #  
 // # # # # # # # 	                         # # # # # # # # # # # # 
 // # # # # # # #  STA-based Gain Bootstrap   # # # # # # # # # # # # 
@@ -15,7 +22,7 @@ VARIABLE		nRounds	//number of bootstrap rounds
 // This calls all the necessary procedures for confidence interval bootstrap
 // the waves AC_avg_scaled and FreqPoints have to exist before this can be run!
 VARIABLE		DoNoiseFloor		// if DoNoiseFloor> 0, the spike times get shifted
-										//and the outcome represents the noise floor rather than the confidence interval
+									// and the outcome represents the noise floor rather than the confidence interval
 
 VARIABLE		earliestST,latestST	// those are boundaries of possible spike times; needed in order to properly shift spike times, i.e. only needed for NoiseFloor 
 	// if not provided they will be approximated by the time of the first and last spike
@@ -40,10 +47,7 @@ ENDIF
 //		ELSE
 //			WAVE AC=AC_avg_scaled
 //		ENDIF 
-		AvgACFromList(ListDataByNote("AC", "spikerate",-100, 1000),"Local_AC_avg_scaled");
-		WAVE Local_AC_avg_scaled
-		// a local, updated version of the average autocorrelation is computed
-			
+		
 
 		IF (exists("FreqPoints" )!=1)
 			DoAlert 0,"FreqPoints not found"
@@ -55,17 +59,60 @@ ENDIF
 		PrepareST_List(SpikeTimeSuffix)
 			// creates the IndexWave "BST_SpikeIndicies"
 			// and the CountWave "BST_SpikeCount"
-			// also creates 2 WAVES of WaveREFERENCES, which hold all STWaves and all IWaves
+			// also creates 4 WAVES of WaveREFERENCES, which hold all STWaves and all IWaves
+			// all STA waves and all AC waves
 			// which are used, in the sequence in which they are listed in the 
 
 		WAVE IndexWave = BST_SpikeIndicies
 		WAVE	CountWave= BST_SpikeCount
 		WAVE/WAVE STReferences=BST_STReferences
 		WAVE/WAVE IReferences=BST_IReferences
+		WAVE/WAVE STAReferences=BST_STAReferences
+		WAVE/WAVE ACReferences=BST_ACReferences
+		
+		// before the actual bootstrap, once more prepare a local, updated version of gain
+		// this will also be used as a reference for the calculation of the confidence interval
+		// of the magnitude
+		// for this we next compute the avg AC and STA
+		WAVE result=AvgAC_ThreadSafe(ACReferences)
+		Duplicate /O result,$"Local_AC_avg_scaled"
+		WAVE Local_AC_avg_scaled
+		WAVE result=AvgSTA_ThreadSafe(STAReferences)
+		Duplicate /O result,$"Local_STA_avg_scaled"
+		WAVE Local_STA_avg_scaled
+		KillWaves result
+		
+		// finally calculate gain 
+		SplitBeforeFFT(Local_AC_avg_scaled,0)
+		// results in a wave
+		WAVE Local_AC_avg_scaled_splt
+		WAVESTATS/Q Local_STA_avg_scaled
+		SplitBeforeFFT(Local_STA_avg_scaled,V_maxloc)
+		// results in a wave
+		WAVE Local_STA_avg_scaled_splt
+		FFT/OUT=1/DEST=Local_AC_avg_scaled_splt_FFT Local_AC_avg_scaled_splt
+		FFT/OUT=1/DEST=Local_STA_avg_scaled_splt_FFT Local_STA_avg_scaled_splt
+		Duplicate/C/O Local_STA_avg_scaled_splt_FFT, Local_Gain_avg_scaled;
+		Local_Gain_avg_scaled/=Local_AC_avg_scaled_splt_FFT
+		Local_Gain_avg_scaled*=cmplx(str2num(StringByKey("total#spikes", note(Local_STA_avg_scaled),":" ,"\r"))/str2num(StringByKey("totalduration", note(Local_STA_avg_scaled),":" ,"\r")),0)
+		Local_Gain_avg_scaled= conj(Local_Gain_avg_scaled)	// fixes the sign of the phase
+		GaussFilter(Local_Gain_avg_scaled)
+		WAVE	FreqPoints
+		WAVE Local_Gain_avg_scaled_MgFlt
+		note Local_Gain_avg_scaled_MgFlt,note(Local_STA_avg_scaled)
+		WAVE Local_Gain_avg_scaled_PhFlt
+		Local_Gain_avg_scaled_PhFlt[]+=2*Pi*-1*V_Maxloc*FreqPoints[p]	
+		note Local_Gain_avg_scaled_PhFlt,"reintroduced phase shift due to STA peak latency"
+
+		KillWaves Local_AC_avg_scaled_splt, Local_STA_avg_scaled,Local_STA_avg_scaled_splt,Local_STA_avg_scaled_splt_FFT
+
 		
 		Shuffle_BST(IndexWave,CountWave, nRounds)
 		
 		WAVE IdxMatrix	= BST_IdxMx
+		// this waves contains randomly shuffled indicies of all the usable spikes 
+		// dimensions are #indicies x #bootstrap rounds
+				
 		// next create the matrix that holds all STAs from Bootstrap
 		// #rows taken from AC_avg_scaled
 		
@@ -77,19 +124,16 @@ ENDIF
 		// now this will take time
 		FillBST_MultiThread(BSTResult, CountWave, IdxMatrix, STReferences, IReferences, DoNoiseFloor, earliestST, latestST)
 
-		
 		// collect complex gains from all those STAs, but first some preparations
 		
 		VARIABLE		nFreqs=DimSize(Freqs,0)
 		MAKE/O/D/N=(nFreqs,nRounds) BST_GainMtx
-		WAVE	Magnitudes= BST_GainMtx		// will hold the Magnitudes
+		WAVE	Magnitudes= BST_GainMtx				// will hold the Magnitudes
 		MAKE/O/D/N=(nFreqs,nRounds) BST_PhsMtx
-		WAVE	Phases= BST_PhsMtx		// will hold the phases
+		WAVE	Phases= BST_PhsMtx					// will hold the Phases
 		
 Print "Bootstrap completed. Starting the gain calculation"
-		SplitBeforeFFT(Local_AC_avg_scaled,0)
-		WAVE	Local_AC_avg_scaled_splt		// created by the last command
-		FFT/OUT=1 /DEST=Local_AC_avg_scaled_splt_FFT Local_AC_avg_scaled_splt // needed to calculate gains
+
 		WAVE/C Local_AC_avg_scaled_splt_FFT
 		// get overall spike rate from note of the Bootstrap STA
 		STRING Notiz=Note(BSTResult)
@@ -102,14 +146,14 @@ Print "Bootstrap completed. Starting the gain calculation"
 		// now read out the number of spikes that went into the STA
 		
 		// now read ou the duration of the trial for that STA
-			VARIABLE	totduration=str2num(StringByKey("totalduration", Notiz,":" ,"\r"))
-			Note_String+="\rtotalduration:"+StringByKey("totalduration", Notiz,":" ,"\r")
-			VARIABLE	totnSpikes=str2num(StringByKey("total#spikes", Notiz,":" ,"\r"))
-			Note_String+="\rtotal#spikes:"+StringByKey("total#spikes", Notiz,":" ,"\r")
+			VARIABLE	totduration=str2num(StringByKey("totalduration", Notiz, ":" ,"\r"))
+			Note_String+="\rtotalduration:"+StringByKey("totalduration", Notiz, ":" ,"\r")
+			VARIABLE	totnSpikes =str2num(StringByKey("total#spikes" , Notiz, ":" ,"\r"))
+			Note_String+="\rtotal#spikes:" +StringByKey("total#spikes" , Notiz, ":" ,"\r")
 
 		VARIABLE globalrate=totnSpikes/totduration
-		//		globalrate=4.56144&& possiblz give a fixed global ate to fix issue
-		IF (globalrate!=globalrate)
+
+		IF (globalrate!=globalrate) // basically a test for being an actual number, not a NaN
 			Abort "Everything went ok but I cannot determine global rate"
 		ENDIF
 //
@@ -164,16 +208,30 @@ Print "Bootstrap completed. Starting the gain calculation"
 			upperlimit=0.975
 			lowerLimit=0.025
 		ENDIF
-		Duplicate/D/O Magnitudes, $NameOfResult 
- 		WAVE Conf_Int=$NameOfResult
-		FOR (rr=0; rr< nFreqs; rr+=1)		// go through frequency points one by one
-			Duplicate/O/R=[rr][0,nRounds-1] Conf_Int Dum 	// make temporary copy of all the magnitude entries 
-			Redimension/N=(nRounds,0) Dum                	// create column vector out of the 1 x nRounds matrix
-			Sort Dum, Dum										// those entries are now sorted
-			Conf_Int[rr][0,nRounds-1]= Dum[q]				// write over the unsorted values
-		ENDFOR
-		// now each column contains sorted entries of magnitudes
+		IF (DoNoiseFloor == 0) // if it is not noise floor, then only use projected vectors (bootstrapped complex numbers projected onto the phase of avg result)
+			Duplicate/D/O Magnitudes, $NameOfResult 
+			WAVE Conf_Int=$NameOfResult
+			FOR (rr=0; rr< nFreqs; rr+=1)		// go through frequency points one by one
+				Duplicate/O/R=[rr][0,nRounds-1] Conf_Int Dum 					// make temporary copy of all the magnitude entries 
+				Redimension/N=(nRounds,0) Dum                	// create column vector out of the 1 x nRounds matrix
+				Dum[]*=cos(Phases[rr][p]-Local_Gain_avg_scaled_PhFlt[rr])		// project onto unit vector with phase of avg gain at that frequency
+				
+				Sort Dum, Dum										// those entries are now sorted
+				Conf_Int[rr][0,nRounds-1]= Dum[q]				// write over the unsorted values
+			ENDFOR
+
 		
+		ELSE
+			Duplicate/D/O Magnitudes, $NameOfResult 
+			WAVE Conf_Int=$NameOfResult
+			FOR (rr=0; rr< nFreqs; rr+=1)		// go through frequency points one by one
+				Duplicate/O/R=[rr][0,nRounds-1] Conf_Int Dum 	// make temporary copy of all the magnitude entries 
+				Redimension/N=(nRounds,0) Dum                	// create column vector out of the 1 x nRounds matrix
+				Sort Dum, Dum										// those entries are now sorted
+				Conf_Int[rr][0,nRounds-1]= Dum[q]				// write over the unsorted values
+			ENDFOR
+			// now each column contains sorted entries of magnitudes
+		ENDIF
  		WAVE Conf_Int=$NameOfResult
 		FOR (rr=0; rr< nFreqs; rr+=1)
 			Duplicate/O/R=[rr][0,nRounds-1] Conf_Int Dum
@@ -221,12 +279,11 @@ STRING			ST_Suff					// suffix identifying spike times, without leading "_"
 	
 	IF (nSubs==0)	// there are no subfolders, work inside the current folder
 		cellFolderList = currentDFPath+";"
-		nsubs=1 // need this to go through the ONE folder, ich which we currently are
-
+		nsubs=1 // this needs to be set, in order to go through this ONE folder, in which we currently are
 	ENDIF
 	VARIABLE		kk, nSTs
 	DFREF			rootFolderRf=GetDataFolderDFR()
-	STRING			STList, currIName, currSTName
+	STRING			STList, currIName, currSTName, currACName, currSTAName
 	VARIABLE		minST, maxST, count
 	
 	
@@ -241,8 +298,13 @@ STRING			ST_Suff					// suffix identifying spike times, without leading "_"
 	// these are only needed for the Multithreading
 	MAKE/O/WAVE/N=0 BST_STReferences
 	MAKE/O/WAVE/N=0 BST_IReferences
+	MAKE/O/WAVE/N=0 BST_STAReferences
+	MAKE/O/WAVE/N=0 BST_ACReferences
+	
 	WAVE/WAVE BST_STReferences
 	WAVE/WAVE BST_IReferences
+	WAVE/WAVE BST_STAReferences
+	WAVE/WAVE BST_ACReferences
 	// go through all subfolders, get spike time waves and put the usable spikes in a list
 	
 	FOR (ii=0;ii<nSubs;ii+=1)
@@ -256,6 +318,21 @@ STRING			ST_Suff					// suffix identifying spike times, without leading "_"
 			WAVE currST=$currSTName
 			currIName=RemoveEnding(currSTName,ST_Suff) + "I" 
 			WAVE	currI=$currIName
+			currACName=currIName + "_AC" 
+			currSTAName=RemoveEnding(currSTName,ST_Suff) + "STA" 
+			
+			IF (!exists(currSTAName))
+				printf "Have to create STA for %s because it was not found. Used time range of 1 second.\r" , currIName
+				STAfromAnalogue(currI,currST, 1,0,Suffix="STA")
+			ENDIF
+			WAVE	currSTA=$currSTAName
+
+			IF (!exists(currACName))
+				WAVE ACref= GetACWORKER(currI,currSTA, currACName)
+				Duplicate acref, $currACName
+			ENDIF
+			WAVE	currAC=$currACName
+
 			
 			// only needed to find out the duration and with this the range of spike times 
 			// that can be used for the STA
@@ -286,9 +363,11 @@ STRING			ST_Suff					// suffix identifying spike times, without leading "_"
 			count = DimSize(BST_SpikeIndicies,0)
 			Redimension/N=(count+maxST-minST+1) BST_SpikeIndicies
 			BST_SpikeIndicies[count,count+maxST-minST]=minST+p-count
+			
 			BST_STReferences[DimSize(BST_STReferences,0)]={currST}
-			WAVE	currI=$currIName
 			BST_IReferences[DimSize(BST_IReferences,0)]={currI}
+			BST_STAReferences[DimSize(BST_STAReferences,0)]={currSTA}
+			BST_ACReferences[DimSize(BST_ACReferences,0)]={currAC}
 
 		ENDFOR
 	ENDFOR
@@ -303,7 +382,7 @@ FUNCTION Shuffle_BST(IndexWave,CountWave, nBSTrounds)
 WAVE	IndexWave,CountWave
 VARIABLE	nBSTrounds	// number of bootstrap rounds
 
-// CountWave contains  the names (incl.path) of all ST waves
+// CountWave contains  the names (incl. path) of all ST waves
 // in the dim label and the respective number of spikes that 
 // can be used from each of those spike time waves
 
@@ -510,11 +589,15 @@ Threadsafe FUNCTION/WAVE CreateFilteredGain(WAVE M_STA,VARIABLE clmn, WAVE/C FFT
 		
 			VARIABLE SplitP=x2pnt(STA,SplitTime+dT/1000)
 		
-			VARIABLE truncLenght=2*floor(DimSize(STA,0)/2)
-			MAKE/O/D/N=(truncLenght) out
+			VARIABLE truncLength=2*floor(DimSize(STA,0)/2)
+			MAKE/O/D/N=(truncLength) out
 			WAVE out
-
-			out[0,DimSize(out,0)-1-SplitP] 						= STA[p+SplitP]	
+			
+			VARIABLE offsetTimeRelativeToMiddle=dT*(SplitP-truncLength/2)
+			// captures how far from middle (zero time) the trace was split
+			// this info is stored to re-introduce the phase offset later
+			
+			out[0,DimSize(out,0)-1-SplitP] 					= STA[p+SplitP]	
 			out[DimSize(out,0)-SplitP,DimSize(out,0)-1]		= STA[p+SplitP-DimSize(out,0)]	
 
 			FFT/OUT=1 /DEST=W_G out
@@ -538,7 +621,7 @@ Threadsafe FUNCTION/WAVE CreateFilteredGain(WAVE M_STA,VARIABLE clmn, WAVE/C FFT
 				FreqPoints[]=minf+df_in*freqFac^p
 				
 			ELSE
-				 nPoints= DimSize(FreqPoints,0)
+				nPoints= DimSize(FreqPoints,0)
 				
 			ENDIF
 			IF (ParamIsDefault(widthFac))
@@ -547,13 +630,14 @@ Threadsafe FUNCTION/WAVE CreateFilteredGain(WAVE M_STA,VARIABLE clmn, WAVE/C FFT
 	     	VARIABLE k,  center, width, weightSum
 	     	DUPLICATE/C/D/O FFTofAC , GWeight
 			Make/C/D/O/N=(nPoints) CmplxResult				// the complex valued result of weighting the noisy complex gain				         
-	      FOR (k=0; k< nPoints; k+=1)
+	      	FOR (k=0; k< nPoints; k+=1)
 				width=FreqPoints[k]/2/Pi	* widthFac		// SD of Gaussian is 1/freq
 				GWeight[]=cmplx( gauss(pnt2x(FFTofAC, p ),FreqPoints[k], width),0)
 				WeightSum = mean(GWeight)*Dimsize(GWeight,0)
 				GWeight/=WeightSum			// making sure the integral of the weight is one
 				GWeight*=W_G	
-				CmplxResult[k]=sum(GWeight)
+				CmplxResult[k] =sum(GWeight)
+				CmplxResult[k]*=p2rect(cmplx(1,2*Pi*-1*offsetTimeRelativeToMiddle*FreqPoints[k]))
 			ENDFOR
 		KillWaves/Z GWeight, W_G,STA
 		SetDataFolder dfSav
