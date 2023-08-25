@@ -25,7 +25,7 @@ Menu "Graph"
 
 		"Add trace browser",		TraceScanner()
 		"Add trace browser transp",		TraceScannerTransparency()
-		"Color Traces",			ColorTraceByWave()
+		"Color Traces",			ColorTracesByWave()
 		"Normalize Traces",			NormTraces()
 		"Set Opacity",			GlobalOpacity()
 		"Distribute vertical axes", DistributeAxes()
@@ -1368,7 +1368,7 @@ VARIABLE cyclelength, invert
 	ModifyGraph/Z btLen=3
 END
 
-FUNCTION ColorTraceByWave([CB])
+FUNCTION ColorTracesByWave([CB])
 WAVE	CB // color basis
 
 
