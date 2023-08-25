@@ -3,7 +3,8 @@
 <body>
   
 # Overview
-This Igor Pro code falls into three categories. AnTools_extended.ipf was developed to automate general wave- and string-based tasks. It was developed by Andreas Neef. Dynamic Time Warping is the translation of Matlab code from David Schultz (see below). The collection inside *Dynamic Gain code* contains some general tools to analyze cellular electrophysiology, specifically spike detection and analysis, and the analysis of spikes fired in response to conventional, square pulse stimulation (frequency-current curves etc.). 
+This Igor Pro was developed by Andreas Neef for Igor Pro 7 to 9. It falls into three categories. *AnTools_extended.ipf* was developed to automate general wave- and string-based tasks as well as basic data input tasks and graphing tasks.
+The collection inside *Dynamic Gain code* contains some general tools to analyze cellular electrophysiology, specifically spike detection and analysis, and the analysis of spikes fired in response to conventional, square pulse stimulation (frequency-current curves etc.). *Dynamic Time Warping* is the translation of Matlab code from David Schultz (see below).
   
 More importantly, the Dynamic Gain code comprises all code to compute the dynamic gain function of neurons that fire in response to continuously fluctuating, <i>in vivo</i>-like stimuli. This analysis reveals how populations encode information under realistic stimuli, aspects of which cannot be obtained with conventional stimuli ( [Lazarov et al. 2018 Sci.Advances](https://doi.org/10.1126/sciadv.aau8621), [Revah et al. 2019 J Neurosci.](https://doi.org/10.1523/JNEUROSCI.3147-18.2019) and [Merino et al. 2021 PNAS](https://doi.org/10.1073/pnas.2114549118)).
 
@@ -13,9 +14,12 @@ ANTools_extended.ipf contains useful tools to speed up common steps in general d
 ### *i) Wrapper functions for repeated application of a list of commands for each item.*
   
   Inside the commands,
-   a number of wildcards (~ §) stand in for the wave name, the index of the current wave in the list of waves etc.
+   a number of wildcards (~ §) stand in for the wave name, the index of the current wave in the list of waves etc. Those wildcards are elaborated in the beginning of the code for the respective functions.
    The items that are looped over can be 
-  - a list of waves provided directly or by a wave name pattern
+  - a list of waves provided directly - with extra options
+    
+    `Xeqt4List("WaveName1; Wavename2;","ExcludeThisName;ExcludeThatNameToo;",Boolean-UseFullPathInCommand,"Cmd1 ~; Cmd2 ~;")`
+  - a list of waves provided by a wave name pattern
       `Xeqt4WList("NameBegin\*NameEnd","Cmd1 ~; Cmd2 ~;")`
   
   - all traces in a graph `Xeqt4TList("Cmd1 §T§")`
