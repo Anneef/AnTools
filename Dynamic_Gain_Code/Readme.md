@@ -11,5 +11,5 @@ Raw data have to be represented as pairs of voltage and current waves which have
 All parameters, such as voltage thresholds or minimal time intervals for spike detection are expected to be in SI units (Volts, Seconds, Ampere etc.). The outcome of analyses, spike train features (e.g inter-spike intervals), action potential shape features (e.g. width, height, after-hyperpolarization magnitude), and Dynamic Gain Magnitude and Phase are also given in units that are combinations of SI units without prefactors (e.g. Hertz / Ampere for the Dynamic Gain Magnitude).
 
 ### Overview of the implemented calculations
-The calculations are explained in the publications 
+The calculations are explained in the publications, in particular in [Merino et al. 2021 PNAS](https://doi.org/10.1073/pnas.2114549118) and [Zhang et al. 2023 BioRxiv](https://doi.org/10.1101/2022.02.04.479104). The following figure gives an overview. 
 ![Main](Flow-chart-Main.png)
