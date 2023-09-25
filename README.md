@@ -3,10 +3,13 @@
 <body>
   
 # Overview
-This Igor Pro was developed by Andreas Neef for Igor Pro 7 to 9. It falls into three categories. *AnTools_extended.ipf* was developed to automate general wave- and string-based tasks as well as basic data input tasks and graphing tasks.
-The collection inside *Dynamic Gain code* contains some general tools to analyze cellular electrophysiology, specifically spike detection and analysis, and the analysis of spikes fired in response to conventional, square pulse stimulation (frequency-current curves etc.). *Dynamic Time Warping* is the translation of Matlab code from David Schultz (see below).
-  
-More importantly, the Dynamic Gain code comprises all code to compute the dynamic gain function of neurons that fire in response to continuously fluctuating, <i>in vivo</i>-like stimuli. This analysis reveals how populations encode information under realistic stimuli, aspects of which cannot be obtained with conventional stimuli ( [Lazarov et al. 2018 Sci.Advances](https://doi.org/10.1126/sciadv.aau8621), [Revah et al. 2019 J Neurosci.](https://doi.org/10.1523/JNEUROSCI.3147-18.2019) and [Merino et al. 2021 PNAS](https://doi.org/10.1073/pnas.2114549118)).
+This code was developed by Andreas Neef for Igor Pro 7 to 9. It falls into three categories.
+
+The collection inside *Dynamic Gain code* contains all code to compute the dynamic gain function of neurons that fire in response to continuously fluctuating, <i>in vivo</i>-like stimuli. This analysis reveals how populations encode information under realistic stimuli, aspects of which cannot be obtained with conventional stimuli ( [Lazarov et al. 2018 Sci.Advances](https://doi.org/10.1126/sciadv.aau8621), [Revah et al. 2019 J Neurosci.](https://doi.org/10.1523/JNEUROSCI.3147-18.2019) and [Merino et al. 2021 PNAS](https://doi.org/10.1073/pnas.2114549118)). The code also contains some general tools to analyze cellular electrophysiology, specifically spike detection and analysis, and the analysis of spikes fired in response to conventional, square pulse stimulation (frequency-current curves etc.). More in the [ReadMe](Dynamic_Gain_Code/Readme.md) inside that folder.
+
+*AnTools_extended.ipf* was developed to automate general wave- and string-based tasks as well as basic data input tasks and graphing tasks.
+
+*Dynamic Time Warping* is the translation of Matlab code from David Schultz (see below).
 
 ## AnTools
 ANTools_extended.ipf contains useful tools to speed up common steps in general data analysis and data display.
@@ -14,7 +17,7 @@ ANTools_extended.ipf contains useful tools to speed up common steps in general d
 ### *i) Wrapper functions for repeated application of a list of commands for each item.*
   
   Inside the commands,
-   a number of wildcards (~ §) stand in for the wave name, the index of the current wave in the list of waves etc. Those wildcards are elaborated in the beginning of the code for the respective functions.
+   a number of wildcards (~ §) stand in for the wave name, the index of the current wave in the list of waves, etc. Those wildcards are elaborated at the beginning of the code for the respective functions.
    The items that are looped over can be 
   - a list of waves provided directly - with extra options
     
@@ -25,11 +28,11 @@ ANTools_extended.ipf contains useful tools to speed up common steps in general d
   - all traces in a graph `Xeqt4TList("Cmd1 §T§")`
   - each integer in an interval `Xeqt4Series(firstNumber,lastNumber,interval,"Cmd1 ~; cmd2 ~;)`
      
- ### *ii) Wrapper function to execute a list of commands in each datafolder inside the current data folder.*
+ ### *ii) Wrapper function to execute a list of commands in each data folder inside the current data folder.*
   
   Inside the 
-     commands, wildcards, such as, §SUB§ §SUBFULL§, \# stand for the partial or full path to the datafolder,
-     the index of the datafolder in the directory etc. 
+     commands, wildcards, such as, §SUB§ §SUBFULL§, \# stand for the partial or full path to the data folder,
+     the index of the data folder in the directory etc. 
      
      `XeqtInSubs("Cmd1, Cmd2")`
   
@@ -50,8 +53,8 @@ ANTools_extended.ipf contains useful tools to speed up common steps in general d
   - `QuantilesFromSample()` returns estimates for specified quantiles for a given set of samples.
 
 ## Dynamic gain code
-This folder contains all functions required to calculate dynamic gain functions from the input and output (current and voltage), to calculate confidence intervals and noise-floor curves for the dynamic gain and to decompose the dynamic gain ([Zhang et al. 2021](https://doi.org/10.1101/2022.02.04.479104)).
-Other code provides tools to detect and characterize action potentials (threshold, height, width, depth and time of after-hyperpolarization, peak upstroke and downstroke speed) and action potential time series (coefficient of variation **CV** and local variability **LV** of inter-spike intervals).
+This folder contains all functions required to calculate dynamic gain functions from the input and output (current and voltage), to calculate confidence intervals and noise-floor curves for the dynamic gain, and to decompose the dynamic gain ([Zhang et al. 2021](https://doi.org/10.1101/2022.02.04.479104)). Details can be found in the  [ReadMe](Dynamic_Gain_Code/Readme.md) inside that folder.
+Other code provides tools to detect and characterize action potentials (threshold, height, width, depth, and time of after-hyperpolarization, peak upstroke and downstroke speed) and action potential time series (coefficient of variation **CV** and local variability **LV** of inter-spike intervals). 
 
 ## DynamicTimeWarping
 This method of waveform-based data alignment is unrelated to dynamic gain calculation. The code in DynamicTimeWarping.ipf is the translation of Matlab code from David Schultz, DAI-Lab, TU Berlin, Germany, 2016, into Igor Pro.
