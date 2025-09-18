@@ -3,7 +3,7 @@
 <body>
   
 # Overview
-This code was developed by Andreas Neef for Igor Pro 7 to 9. It falls into three categories.
+This code was developed by Andreas Neef for Igor Pro 7 to 10. It falls into three categories.
 
 The collection inside *Dynamic Gain code* contains all code to compute the dynamic gain function of neurons that fire in response to continuously fluctuating, <i>in vivo</i>-like stimuli. This analysis reveals how populations encode information under realistic stimuli, aspects of which cannot be obtained with conventional stimuli ( [Lazarov et al. 2018 Sci.Advances](https://doi.org/10.1126/sciadv.aau8621), [Revah et al. 2019 J Neurosci.](https://doi.org/10.1523/JNEUROSCI.3147-18.2019) and [Merino et al. 2021 PNAS](https://doi.org/10.1073/pnas.2114549118)). The code also contains some general tools to analyze cellular electrophysiology, specifically spike detection and analysis, and the analysis of spikes fired in response to conventional, square pulse stimulation (frequency-current curves etc.). More in the [ReadMe](Dynamic_Gain_Code/Readme.md) inside that folder.
 
