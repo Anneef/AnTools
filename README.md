@@ -33,7 +33,6 @@ ANTools_extended.ipf contains useful tools to speed up common steps in general d
   Inside the 
      commands, wildcards, such as, §SUB§ §SUBFULL§, \# stand for the partial or full path to the data folder,
      the index of the data folder in the directory etc. 
-     
      `XeqtInSubs("Cmd1, Cmd2")`
   
   ### *iii) Functions that add functionality to a graph or automate styling.* 
