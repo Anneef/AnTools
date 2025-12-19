@@ -34,6 +34,18 @@ end
 // ***************************************************
 // aNNe tools for fast processing of repetitive tasks
 // ***************************************************
+
+// Extend Wavelist to scan all donwstream folders
+// this following is code to be sed from the Command line, not an actual function
+// it can be very useful in combination with Xeqt4List
+// the name template "A*_I" has to be replaced with whatever wave name pattern is 
+// the intended target
+
+//STRING/G EligibleWaves="";
+//XeqtInSubs("::EligibleWaves+=ReplaceString(\";\", \";\"+RemoveEnding(Wavelist(\"A*_I\",\";\",\"\")), \";§SUBFULL§\")")     
+//EligibleWaves=ReplaceString(";",EligibleWaves,"",0,1)
+//EligibleWaves+=";"
+
 FUNCTION	EvokeExecForList()	
 	STRING		targetStr, Liste
 	STRING		SkipListe, Cmd
@@ -1368,14 +1380,16 @@ VARIABLE cyclelength, invert
 	ModifyGraph/Z btLen=3
 END
 
-FUNCTION ColorTracesByWave([CB])
+FUNCTION ColorTracesByWave([CB,minBasisValue,maxBasisValue,opacity])
 WAVE	CB // color basis
+VARIABLE		maxBasisValue, minBasisValue, opacity
 
 
 // the application case for this function is a graph with N traces 
 // where each trace should be coloured according to a single value
 // these values are stored in the CBasis wave
-// 
+// maxBasisValue, minBasisValue, and opacity set the max and min values of the color scale 
+// (otherwise those are taking to be the max and min of the CB wave
 
 	VARIABLE	CBasisIndx
 	IF (ParamIsDefault(CB))	
@@ -1407,13 +1421,22 @@ WAVE	CB // color basis
 		DoAlert 0,"Your color basis wave " + NameOfWave(CB)+" contains "+num2istr(V_numNaNs)+" NaN values. Aborting..."
 		Return -1
 	ENDIF
-	VARIABLE		maxBasisValue=V_max, minBasisValue=V_min	, opacity=1
-	
+
+	IF (ParamIsDefault(minBasisValue))
+		minBasisValue=V_min
+	ENDIF
+	IF (ParamIsDefault(maxBasisValue))
+		minBasisValue=V_max
+	ENDIF
+	IF (ParamIsDefault(opacity))
+		opacity=1
+	ENDIF
+
 	STRING		GraphName = WinName(0,1) // top (index zero), Graph (bit 1)
 	STRING		CScaleName= GraphName[0,min(27,strlen(GraphName)-1)]+"_ClSc"
 	
 	STRING		OriCScaleName, CScaleList= CTabList()
-	VARIABLE		OriCScale
+	VARIABLE		OriCScale=30
 	Prompt		OriCScale, "Color scale", popup,  CScaleList
 	Prompt		minBasisValue, "lower value of colorscale"
 	Prompt		maxBasisValue, "upper value of colorscale"
@@ -2092,7 +2115,7 @@ Function/S DoOpenMultiFileDialog_aNNe()
 	Variable refNum
 	String message = "Select one or more files"
 	String outputPaths
-	String fileFilters = "Data Files (*.txt,*.dat,*.csv,*.mat,*.abf,*.tif):.txt,.dat,.csv,.mat,.abf,.tif;"
+	String fileFilters = "Data Files (*.txt,*.dat,*.csv,*.mat,*.abf,*.tif,*.h5):.txt,.dat,.csv,.mat,.abf,.tif,.h5;"
 	fileFilters += "All Files:.*;"
 
 	Open /D /R /MULT=1 /F=fileFilters /M=message refNum
@@ -2250,6 +2273,12 @@ ELSE
 					ENDFOR
 					S_WaveNames=""
 					break
+				case "h5": // HDF5 files  - groups from root
+					VARIABLE currFileID, currGroupID
+					HDF5OpenFile /R currFileID as CurrFile
+					HDF5OpenGroup currFileID, "/", currGroupID
+					HDF5LoadGroup /ENUM=0 /IGOR =- 1 /L=7 /O /ORDR=0 /OPTS=1 /T /TRAN=1 /VAR=1 root:,currGroupID,"/"
+					HDF5CloseFile currFileID
 				case "last":
 					ResultWaveName=StringFromList(ff-1,CurrItem,"_")
 					break
@@ -2756,11 +2785,11 @@ INT		CertainThatNormal		// set to 1 if the underlying distribution is normal
 		
 END
 
-FUNCTION/WAVE SplitBeforeFFT(InWave, SplitTime)
+Threadsafe FUNCTION/WAVE SplitBeforeFFT(InWave, SplitTime)
 WAVE		InWave
 VARIABLE	SplitTime
 // Timepoint according to x-index
-// tjis requires to wave to have appropriate x-scaling
+// this requires the wave to have appropriate x-scaling
 
 // splits a function and puts it together such that the first point of the output corresponds
 // to the point closest to the SplitTime in the input
@@ -2769,13 +2798,21 @@ VARIABLE	SplitTime
 // of points in the output should be an even number
 // if the input has an even number of points - everything is fine
 // if the input has an odd number of points, one point has to be deleted. This is approached with the 
-// assumption that the last and first points of the input are not neighbours (in a physical sense
+// assumption that the last and first points of the input are not neighbours (in a physical sense)
 // this assumption is in some cases wrong.
 // starting from this assumption, it makes sense to delete one of the points (the last)
 
+	STRING	OutName = NameOfWave(InWave)
+//	OutName=OutName[0,25]+"_splt" // using the liberal name length in IP 7
+	OutName=OutName+"_splt"
+	Duplicate/O/R=[0,2*floor(DimSize(InWave,0)/2)-1] InWave, $OutName
+	WAVE out=$OutName
+
 // check whether Split time is inside the x-index
 	IF ( SplitTime < DimOffset(InWave,0)  || SplitTime > pnt2x(InWave,numpnts(InWave)-1) )
-		Abort "The intended split time is outside the x-Range of in-wave."
+		Print "The intended split time is outside the x-Range of in-wave."
+		out = NaN
+		Return out
 	ENDIF
 	VARIABLE	dT=DimDelta(Inwave,0)
 
@@ -2789,11 +2826,11 @@ VARIABLE	SplitTime
 // first point after splitting
 // shifting the SplitTime very slightly to the right this is avoided
 
-	STRING	OutName = NameOfWave(InWave)
-//	OutName=OutName[0,25]+"_splt" // using the liberal name length in IP 7
-	OutName=OutName+"_splt"
-	Duplicate/O/R=[0,2*floor(DimSize(InWave,0)/2)-1] InWave, $OutName
-	WAVE out=$OutName
+                                    
+                                                                         
+                        
+                                                                  
+                  
 	out[0,DimSize(out,0)-1-SplitP] 						= InWave[p+SplitP]	
 	out[DimSize(out,0)-SplitP,DimSize(out,0)-1]		= InWave[p+SplitP-DimSize(out,0)]	
 	// last line corrected 06/03/2016 before it read [p-splitP], which for the standard case of splitting 
@@ -2808,6 +2845,7 @@ VARIABLE	SplitTime
 END
 
 // next copied out of removpoints.ipf, but threadsafe
+
 
 Threadsafe Function thdsfRemoveNaNs(theWave)
 	Wave theWave
