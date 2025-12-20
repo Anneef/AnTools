@@ -23,7 +23,7 @@ ANTools_extended.ipf contains useful tools to speed up common steps in general d
     
     `Xeqt4List("WaveName1; Wavename2;","ExcludeThisName;ExcludeThatNameToo;",Boolean-UseFullPathInCommand,"Cmd1 ~; Cmd2 ~;")`
   - a list of waves provided by a wave name pattern
-      `Xeqt4WList("NameBegin\*NameEnd","Cmd1 ~; Cmd2 ~;")`
+      `Xeqt4WList("NameBegin*NameEnd","Cmd1 ~; Cmd2 ~;")`
   
   - all traces in a graph `Xeqt4TList("Cmd1 §T§")`
   - each integer in an interval `Xeqt4Series(firstNumber,lastNumber,interval,"Cmd1 ~; cmd2 ~;)`
