@@ -14,7 +14,7 @@ An alternative method to derive the dynamic gain function does not require an ad
 
 
 ### Requirements
-The Dynamic Gain Code requires the *ANtools_extended.ipf*  but no external functions from outside the repository. Should you wish to import data in the proprietary file formats of *Clampex* or *PatchMaster* into Igor Pro, I suggest you use the additional files created by htasche, which are available at [bpc_ReadAxg](https://www.wavemetrics.com/project/bpc_ReadAxg) and [bpc_ReadHeka](https://www.wavemetrics.com/project/bpc_ReadHeka).
+The Dynamic Gain Code requires the *ANtools_extended.ipf*  but no external functions from outside the repository. Should you wish to import data in the proprietary file formats of *Clampex* or *PatchMaster* into Igor Pro, I suggest you use the additional files created by htasche, which are available at [bpc_ReadAbf](https://www.wavemetrics.com/project/bpc_ReadAbf) and [bpc_ReadHeka](https://www.wavemetrics.com/project/bpc_ReadHeka).
 
 Raw data have to be represented as pairs of voltage and current waves which have to be named with a common trial name and the suffixes "_V" and "_I". For automation, all trial names should start with the same prefix. The units of amplitude and time should be Volt and Ampere, and Seconds.  
 
