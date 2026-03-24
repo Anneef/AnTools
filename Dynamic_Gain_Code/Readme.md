@@ -4,7 +4,7 @@
   
 ## Dynamic Gain
   
-Through its synapses, a cortical neuron receives hundreds to thousands of inputs per second, so its membrane potential is constantly fluctuating. These fluctuations drive the cell to fire action potentials. The dynamic gain function captures the relationship between the different frequency components that constitute the input, e.g., slow undulations or more abrupt fluctuations, and the times at which action potentials are initiated. This explanation prescribes a method to measure dynamic gain: 
+Through its synapses, a *cortical* neuron receives hundreds to thousands of inputs per second, so its membrane potential is constantly fluctuating. These fluctuations drive the cell to fire action potentials. The dynamic gain function captures the relationship between the different frequency components that constitute the input, e.g., slow undulations or more abrupt fluctuations, and the times at which action potentials are initiated. This explanation prescribes a method to measure dynamic gain: 
 i) inject a random fluctuating current that drives irregular firing at a pre-decided rate,
 ii) superimpose a weak sinusoidal current, and
 iii) determine how strongly the action potential generation is phase-locked to the sinusoid (see [Revah et al. 2025 bioRxiv](https://www.biorxiv.org/content/10.1101/2024.02.15.580451v5) Fig. S1A to S1C).
